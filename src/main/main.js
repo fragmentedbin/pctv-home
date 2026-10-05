@@ -158,18 +158,22 @@ function buildTray() {
 // aren't unlocked after the grace period. The unlock is re-verified on every check.
 function startWatermark() {
   const sup = server.supporter;
-  if (!sup?.enabled) return;
-  const force = process.env.PCTV_FORCE_WATERMARK === '1';
+  if (!sup?.enabled) { console.log('[watermark] off: no PUBLIC_KEY_PEM in supporter/config.js'); return; }
+  // trimmed: cmd's `set X=1 && npm start` stores "1 " with a trailing space
+  const force = /^(1|true|yes|on)$/i.test(String(process.env.PCTV_FORCE_WATERMARK || '').trim());
+  if (force) console.log('[watermark] PCTV_FORCE_WATERMARK is on');
   const moveEveryMs = Number(process.env.PCTV_WATERMARK_MOVE_MS) || sup.watermarkConfig.moveEveryMs; // env: testing only
   watermark = createWatermark({ text: sup.watermarkText, moveEveryMs, getDisplay: kioskDisplay });
-  let running = false;
+  let running = false, lastWhy = '';
   const tick = async () => {
     if (running) return;
     running = true;
     try {
       const due = force ? !sup.isUnlocked() : sup.watermarkVisible();
-      const show = due && await server.kioskForeground();
-      if (show) await watermark.show({ leftOnly: await server.kioskOnHome() }); else await watermark.hide();
+      const front = due && await server.kioskForeground();
+      const why = !due ? (sup.isUnlocked() ? 'unlocked' : 'grace period') : !front ? 'kiosk not in front' : 'showing';
+      if (why !== lastWhy) { console.log(`[watermark] ${why}`); lastWhy = why; }
+      if (due && front) await watermark.show({ leftOnly: await server.kioskOnHome() }); else await watermark.hide();
     } catch (e) { console.warn('[watermark]', e.message); }
     finally { running = false; }
   };

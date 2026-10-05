@@ -39,6 +39,9 @@ const DEFAULT_TILES = [
  * @param {string} [opts.watchDir]   dev only: restart/reload on code changes
  * @param {object} [opts.app]        desktop-app hooks for the control panel
  */
+// "1", "true", "yes"; trimmed, because cmd's `set X=1 && …` stores "1 " with a space
+const envFlag = name => /^(1|true|yes|on)$/i.test(String(process.env[name] || '').trim());
+
 function createServer(opts) {
   const PORT = Number(opts.port || 3000);
   const HOST = opts.host || '0.0.0.0';
@@ -254,7 +257,7 @@ function createServer(opts) {
     if (stats.get()) ws.send(JSON.stringify({ t: 'stats', ...stats.get() }));
     if (supporter?.enabled) {
       // phones may get the support prompt (never the TV); at most every few days
-      const prompt = ws.isRemote && supporter.takePrompt({ force: process.env.PCTV_FORCE_NAG === '1' });
+      const prompt = ws.isRemote && supporter.takePrompt({ force: envFlag('PCTV_FORCE_NAG') });
       ws.send(JSON.stringify({ t: 'supporter', ...supporter.status(), prompt }));
     }
     ws.on('message', raw => {
