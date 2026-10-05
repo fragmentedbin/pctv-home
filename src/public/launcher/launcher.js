@@ -4,6 +4,7 @@
   const addDlg = $('#addDlg');
   const delDlg = $('#delDlg');
   const screenDlg = $('#screenDlg');
+  const optDlg = $('#optDlg');
   const DEFAULT_COLOR = '#2b2f3a';
   const COLORS = [DEFAULT_COLOR, '#1db954', '#e50914', '#1f80e0', '#7b2cbf', '#ff6d00', '#00897b', '#c2185b'];
 
@@ -11,6 +12,8 @@
   let focused = null;
   let lastMainFocus = 0;
   let pendingDelete = null;
+  let optTile = null;    // tile whose options are open
+  let movingId = null;   // tile being moved with ← →
   let addColor = COLORS[0];
   const look = {}; // per tile id: { icon: url|null, plate: bool, accent, color }
 
@@ -120,8 +123,9 @@
       };
       img.src = `/api/icon/${t.id}`;
     }
-    el.addEventListener('click', () => openTile(t));
-    el.addEventListener('contextmenu', e => { e.preventDefault(); askDelete(t); });
+    if (t.id === movingId) el.classList.add('moving');
+    el.addEventListener('click', () => (movingId ? endMove() : openTile(t)));
+    el.addEventListener('contextmenu', e => { e.preventDefault(); openOptions(t); });
     return el;
   }
 
@@ -170,7 +174,7 @@
       if (t.tv) meta.push('<i class="sep"></i><span class="badge">TV mode</span>');
       if (!t.builtin) meta.push('<i class="sep"></i><span>Press <kbd>Del</kbd> to remove</span>');
       $('#heroMeta').innerHTML = meta.join('');
-      $('#heroCta').innerHTML = '<kbd>OK</kbd><span>to open</span>';
+      $('#heroCta').innerHTML = '<kbd>OK</kbd><span>to open</span><span class="cta-sep"></span><kbd>Hold OK</kbd><span>for options</span>';
     } else {
       $('#heroKicker').textContent = 'Customize';
       $('#heroTitle').textContent = 'Add an app';
@@ -180,7 +184,7 @@
   }
 
   // ---------- focus / spatial navigation ----------
-  const activeLayer = () => (!addDlg.hidden ? addDlg : !delDlg.hidden ? delDlg : !screenDlg.hidden ? screenDlg : $('#main'));
+  const activeLayer = () => (!addDlg.hidden ? addDlg : !delDlg.hidden ? delDlg : !screenDlg.hidden ? screenDlg : !optDlg.hidden ? optDlg : $('#main'));
   const layerItems = () => activeLayer() === $('#main')
     ? [...document.querySelectorAll('.top .focusable'), ...$('#main').querySelectorAll('.focusable')]
     : [...activeLayer().querySelectorAll('.focusable')];
@@ -292,8 +296,61 @@
     await loadTiles();
     toast('App added');
   }
+  // ---------- app options: open / move / remove ----------
+  function openOptions(t) {
+    if (!t || movingId) return;
+    optTile = t;
+    $('#optTitle').textContent = t.name;
+    optDlg.hidden = false;
+    setFocus($('#optOpen'));
+  }
+  function focusedTile() {
+    const i = focused?.dataset.index;
+    return i !== undefined && focused.classList.contains('tile') ? tiles[+i] : null;
+  }
+  function startMove(t) {
+    optDlg.hidden = true;
+    movingId = t.id;
+    document.body.classList.add('moving-mode');
+    render();
+    setFocus(row.querySelector('.tile.moving'));
+    toast('Use ← → to move it, OK when done');
+  }
+  function shiftMoving(dir) {
+    const from = tiles.findIndex(t => t.id === movingId);
+    const to = from + dir;
+    if (from < 0 || to < 0 || to >= tiles.length) return;
+    const [t] = tiles.splice(from, 1); tiles.splice(to, 0, t);
+    render();
+    setFocus(row.querySelector('.tile.moving'));
+    fetch(`/api/tiles/${t.id}/move`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }) });
+  }
+  function endMove() {
+    if (!movingId) return;
+    movingId = null;
+    document.body.classList.remove('moving-mode');
+    row.querySelector('.tile.moving')?.classList.remove('moving');
+    toast('Saved');
+  }
+  $('#optOpen').addEventListener('click', () => { const t = optTile; closeDialogs(); if (t) openTile(t); });
+  $('#optMove').addEventListener('click', () => optTile && startMove(optTile));
+  $('#optRemove').addEventListener('click', () => { const t = optTile; optDlg.hidden = true; askDelete(t); });
+  $('#optCancel').addEventListener('click', closeDialogs);
+
+  $('#addOpen').addEventListener('click', async () => {
+    const url = $('#fUrl').value.trim();
+    if (!url) return setFocus($('#fUrl'));
+    const r = await fetch('/api/open-url', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, tv: $('#fTv').checked }),
+    }).catch(() => null);
+    if (!r || !r.ok) { toast('That web address looks invalid'); return setFocus($('#fUrl')); }
+    const j = await r.json();
+    closeDialogs();
+    if (!j.ok) location.href = j.url; // no DevTools connection: plain navigation
+  });
+
   function askDelete(t) {
-    if (!t || t.builtin) return;
+    if (!t) return;
     pendingDelete = t;
     $('#delTitle').textContent = `Remove “${t.name}”?`;
     delDlg.hidden = false;
@@ -308,7 +365,7 @@
     if (name) toast(`“${name}” removed`);
   }
   function closeDialogs() {
-    addDlg.hidden = true; delDlg.hidden = true; screenDlg.hidden = true;
+    addDlg.hidden = true; delDlg.hidden = true; screenDlg.hidden = true; optDlg.hidden = true;
     const items = layerItems();
     setFocus(items[Math.min(lastMainFocus, items.length - 1)]);
   }
@@ -413,7 +470,17 @@
   // ---------- keyboard ----------
   document.addEventListener('keydown', e => {
     const inInput = e.target.tagName === 'INPUT' && e.target.type !== 'checkbox';
+    if (movingId) { // moving an app: ← → place it, anything else finishes
+      e.preventDefault();
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') shiftMoving(e.key === 'ArrowLeft' ? -1 : 1);
+      else if (['Enter', 'Escape', 'Backspace', 'ArrowUp', 'ArrowDown'].includes(e.key)) endMove();
+      return;
+    }
     switch (e.key) {
+      case 'ContextMenu':
+        e.preventDefault();
+        if (activeLayer() === $('#main')) openOptions(focusedTile());
+        break;
       case 'ArrowUp': case 'ArrowDown':
         e.preventDefault(); move(e.key); break;
       case 'ArrowLeft': case 'ArrowRight':
@@ -432,7 +499,7 @@
       case 'Delete': {
         if (inInput || activeLayer() !== $('#main')) return;
         const i = focused?.dataset.index;
-        if (i !== undefined) askDelete(tiles[+i]);
+        if (i !== undefined && focused.classList.contains('tile')) askDelete(tiles[+i]);
         break;
       }
     }
@@ -454,6 +521,11 @@
       if (m.t === 'stats') renderStats(m);
       if (m.t === 'reload-ui') location.reload();
       if (m.t === 'incognito') setIncognito(m.on);
+      if (m.t === 'hold') { // long-press OK on the phone
+        if (movingId) endMove();
+        else if (activeLayer() === $('#main') && focusedTile()) openOptions(focusedTile());
+        else focused?.click(); // anywhere else it's a normal OK
+      }
       if (m.t === 'hello') setIncognito(m.incognito);
       if (m.t === 'hello') { // server restarted with new code -> pick up the new UI
         if (bootId && bootId !== m.boot) location.reload();

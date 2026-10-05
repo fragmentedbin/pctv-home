@@ -143,9 +143,24 @@ function createServer(opts) {
   });
   app.delete('/api/tiles/:id', auth, (req, res) => {
     const before = tiles.length;
-    tiles = tiles.filter(t => t.id !== req.params.id || t.builtin);
+    tiles = tiles.filter(t => t.id !== req.params.id); // built-in apps too; "Reset apps" brings them back
     if (tiles.length !== before) { icons.remove(req.params.id); saveTiles(); broadcast({ t: 'tiles' }); }
     res.json({ ok: true });
+  });
+  // reorder: { to: newIndex } or { by: -1 | 1 }
+  app.post('/api/tiles/:id/move', auth, (req, res) => {
+    const from = tiles.findIndex(t => t.id === req.params.id);
+    if (from < 0) return res.status(404).json({ error: 'no tile' });
+    const to = Math.max(0, Math.min(tiles.length - 1,
+      Number.isInteger(req.body?.to) ? req.body.to : from + (Number(req.body?.by) || 0)));
+    if (to !== from) { const [t] = tiles.splice(from, 1); tiles.splice(to, 0, t); saveTiles(); broadcast({ t: 'tiles' }); }
+    res.json({ ok: true, index: to });
+  });
+  // put back built-in apps that were removed (keeps your own apps and order)
+  app.post('/api/tiles/restore', auth, (req, res) => {
+    const missing = DEFAULT_TILES.filter(d => !tiles.some(t => t.id === d.id));
+    if (missing.length) { tiles.push(...structuredClone(missing)); saveTiles(); broadcast({ t: 'tiles' }); }
+    res.json({ ok: true, restored: missing.map(t => t.name) });
   });
   app.post('/api/tiles/reset', auth, (req, res) => { tiles = structuredClone(DEFAULT_TILES); saveTiles(); broadcast({ t: 'tiles' }); res.json({ ok: true }); });
 
@@ -167,6 +182,15 @@ function createServer(opts) {
     if (!tile) return res.status(404).json({ error: 'no tile' });
     try { await browser.open(tile.url, tile.tv); res.json({ ok: true, via: 'cdp' }); }
     catch (e) { res.json({ ok: false, url: tile.url }); } // launcher falls back to location.href
+  });
+
+  // open any web address without making a shortcut
+  app.post('/api/open-url', auth, async (req, res) => {
+    let url = String(req.body?.url || '').trim();
+    if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+    try { if (!/^https?:$/.test(new URL(url).protocol)) throw 0; } catch { return res.status(400).json({ error: 'invalid url' }); }
+    try { await browser.open(url, !!req.body?.tv); res.json({ ok: true, via: 'cdp' }); }
+    catch { res.json({ ok: false, url }); }
   });
 
   // ---------- websocket (remote control) ----------
@@ -232,6 +256,12 @@ function createServer(opts) {
           else if (NAV_KEYS.has(m.k)) navKey(m.k);
           break;
         case 'back': doBack(); break;
+        case 'hold': // long-press OK: options menu on TV Home, a normal OK anywhere else
+          browser.currentUrl().then(u => {
+            if (u && new URL(u).origin + new URL(u).pathname === `http://localhost:${PORT}/`) broadcast({ t: 'hold' });
+            else navKey('enter');
+          }, () => navKey('enter'));
+          break;
         case 'voice': browser.startVoiceSearch().then(
           ok => ws.send(JSON.stringify({ t: 'voice-ack', ok })),
           () => ws.send(JSON.stringify({ t: 'voice-ack', ok: false })));

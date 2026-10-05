@@ -68,7 +68,7 @@
       <span><kbd>←</kbd><kbd>→</kbd> Navigate</span>
       <span><kbd>OK</kbd> Open</span>
       <span><kbd>Esc</kbd> Back</span>
-      <span><kbd>Del</kbd> Remove</span>
+      <span><kbd>Hold OK</kbd> Options</span>
     </div>
     <aside class="qr-card" id="qrCard">
       <img id="qr" src="/api/qr.svg" alt="Remote QR code">
@@ -94,8 +94,8 @@
   <div class="overlay" id="addDlg" hidden>
     <div class="dialog">
       <div class="dlg-head">
-        <h3>Add an app</h3>
-        <p class="muted">Pin any website. You can also add apps from the phone remote.</p>
+        <h3>Add an app or open a link</h3>
+        <p class="muted">Pin any website, or just open it once. You can also do this from the phone remote.</p>
       </div>
       <label class="field">Name<input class="focusable" id="fName" placeholder="Spotify" maxlength="40"></label>
       <label class="field">Web address<input class="focusable" id="fUrl" placeholder="open.spotify.com" inputmode="url"></label>
@@ -106,6 +106,7 @@
       </label>
       <div class="btns">
         <button class="focusable primary" id="addSave">Add app</button>
+        <button class="focusable ghost" id="addOpen">Just open</button>
         <button class="focusable ghost" id="addCancel">Cancel</button>
       </div>
     </div>
@@ -120,6 +121,21 @@
       </div>
       <div class="screens" id="screenList"></div>
       <div class="btns"><button class="focusable ghost" id="screenCancel">Cancel</button></div>
+    </div>
+  </div>
+
+  <!-- App options (hold OK / right-click / Menu key) -->
+  <div class="overlay" id="optDlg" hidden>
+    <div class="dialog small">
+      <div class="dlg-head">
+        <h3 id="optTitle">App</h3>
+      </div>
+      <div class="screens opts">
+        <button class="screen-opt focusable" id="optOpen"><svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg><span><b>Open</b></span></button>
+        <button class="screen-opt focusable" id="optMove"><svg viewBox="0 0 24 24"><path d="M5 12h14M8 8l-4 4 4 4M16 8l4 4-4 4"/></svg><span><b>Move</b><small>Use ← → to place it, OK when done</small></span></button>
+        <button class="screen-opt focusable opt-danger" id="optRemove"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg><span><b>Remove from Home</b></span></button>
+      </div>
+      <div class="btns"><button class="focusable ghost" id="optCancel">Cancel</button></div>
     </div>
   </div>
 

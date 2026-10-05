@@ -52,7 +52,7 @@
     <div id="dpadView" class="dpad">
       <button class="dir up"    data-key="up"    aria-label="Up"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
       <button class="dir left"  data-key="left"  aria-label="Left"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
-      <button class="ok"        data-key="enter" data-norepeat aria-label="OK">OK</button>
+      <button class="ok"        data-key="enter" data-norepeat data-hold aria-label="OK (hold for options)">OK</button>
       <button class="dir right" data-key="right" aria-label="Right"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
       <button class="dir down"  data-key="down"  aria-label="Down"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
     </div>
@@ -120,8 +120,9 @@
   <!-- apps sheet -->
   <div class="sheet" id="appsSheet" hidden>
     <div class="sheet-card">
-      <h3>Open an app</h3>
+      <h3>Open an app <small class="hint">Hold an app for options</small></h3>
       <div class="apps-grid" id="appsGrid"></div>
+      <button class="link" id="restoreApps">Restore removed built-in apps</button>
       <button class="link" data-close>Close</button>
     </div>
   </div>
@@ -129,15 +130,32 @@
   <!-- add tile sheet -->
   <div class="sheet" id="addSheet" hidden>
     <div class="sheet-card">
-      <h3>Add a tile</h3>
+      <h3>Add an app or open a link</h3>
       <input id="tName" type="text" placeholder="Name (e.g. Spotify)" maxlength="40">
       <input id="tUrl" type="url" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="https://open.spotify.com">
       <input id="tIcon" type="url" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="Icon image URL (optional)">
       <label class="check"><input type="checkbox" id="tTv"> TV mode (smart-TV user agent)</label>
       <div class="sheet-row">
+        <button id="tOpen">Just open</button>
         <button id="tSave" class="primary">Add to TV</button>
       </div>
       <p id="tMsg" class="msg"></p>
+      <button class="link" data-close>Close</button>
+    </div>
+  </div>
+
+  <!-- app options (long-press an app) -->
+  <div class="sheet" id="optSheet" hidden>
+    <div class="sheet-card">
+      <h3 id="optTitle">App</h3>
+      <div class="opt-list">
+        <button data-opt="open"><b>Open</b></button>
+        <button data-opt="first"><b>Move to the front</b></button>
+        <button data-opt="left"><b>Move left</b><small>One place earlier</small></button>
+        <button data-opt="right"><b>Move right</b><small>One place later</small></button>
+        <button data-opt="remove" class="danger"><b>Remove from Home</b><small>Tap again to confirm</small></button>
+      </div>
+      <p id="optMsg" class="msg"></p>
       <button class="link" data-close>Close</button>
     </div>
   </div>

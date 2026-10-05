@@ -280,3 +280,12 @@ html.idle, html.idle * { cursor: none !important; }
 .incog-badge svg, #incogBtn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 #incogBtn[data-state="on"] { color: #e8eaed; background: rgba(154,160,166,.22); }
 body.incognito .backdrop { filter: grayscale(.85) brightness(.75); }
+
+/* ---------- app options / move ---------- */
+.opts .screen-opt { font: inherit; color: var(--text); text-align: left; border: 0; }
+.opts .screen-opt svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.opts .opt-danger b, .opts .opt-danger svg { color: #f28b82; }
+.tile.moving .card { outline: 3px dashed #fff; outline-offset: 6px; animation: wiggle .9s ease-in-out infinite; }
+.tile.moving .label::after { content: '  ← →'; color: var(--text-3); }
+@keyframes wiggle { 0%, 100% { transform: rotate(-1.2deg); } 50% { transform: rotate(1.2deg); } }
+.cta-sep { width: 18px; }

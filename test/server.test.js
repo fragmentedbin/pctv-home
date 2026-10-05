@@ -44,9 +44,18 @@ test('tiles: defaults, add, delete', async () => {
   await fetch(`${base}/api/tiles/${add.id}`, { method: 'DELETE' });
   const after = await (await fetch(`${base}/api/tiles`)).json();
   assert.ok(!after.some(t => t.id === add.id));
-  // built-ins can't be deleted
+  // reorder
+  const ids = l => l.map(t => t.id);
+  const post = (u, b) => fetch(base + u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
+  await post('/api/tiles/netflix/move', { to: 0 });
+  assert.equal(ids(await (await fetch(`${base}/api/tiles`)).json())[0], 'netflix');
+  await post('/api/tiles/netflix/move', { by: 1 });
+  assert.equal(ids(await (await fetch(`${base}/api/tiles`)).json())[1], 'netflix');
+  // built-ins can be removed too, and reset brings them back
   await fetch(`${base}/api/tiles/netflix`, { method: 'DELETE' });
-  assert.ok((await (await fetch(`${base}/api/tiles`)).json()).some(t => t.id === 'netflix'));
+  assert.ok(!(await (await fetch(`${base}/api/tiles`)).json()).some(t => t.id === 'netflix'));
+  await post('/api/tiles/reset', {});
+  assert.equal(ids(await (await fetch(`${base}/api/tiles`)).json())[1], 'netflix');
 });
 
 test('invalid tile url is rejected', async () => {

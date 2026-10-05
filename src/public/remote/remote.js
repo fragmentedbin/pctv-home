@@ -60,6 +60,17 @@
     let delayT = null, repT = null;
     const fire = () => k ? send({ t: 'key', k }) : send({ t: cmd });
     const stop = () => { clearTimeout(delayT); clearInterval(repT); btn.classList.remove('pressed'); };
+    if ('hold' in btn.dataset) { // OK: tap = select, hold = options (fires on release, like a TV remote)
+      let held = false, down = false;
+      btn.addEventListener('pointerdown', e => {
+        e.preventDefault(); btn.classList.add('pressed'); held = false; down = true;
+        delayT = setTimeout(() => { held = true; navigator.vibrate?.(25); send({ t: 'hold' }); }, 550);
+      });
+      btn.addEventListener('pointerup', () => { if (down && !held) fire(); down = false; stop(); });
+      ['pointercancel', 'pointerleave'].forEach(ev => btn.addEventListener(ev, () => { down = false; stop(); }));
+      btn.addEventListener('contextmenu', e => e.preventDefault());
+      return;
+    }
     btn.addEventListener('pointerdown', e => {
       e.preventDefault();
       btn.classList.add('pressed');
@@ -262,14 +273,52 @@
         img.src = `/api/icon/${t.id}?k=${encodeURIComponent(key)}`;
         const label = document.createElement('span'); label.textContent = t.name;
         b.append(img, label);
-        b.addEventListener('click', async () => {
-          closeSheets();
-          await fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Remote-Key': key }, body: JSON.stringify({ id: t.id }) });
-        });
+        let holdT = null, held = false;
+        b.addEventListener('pointerdown', () => { held = false; holdT = setTimeout(() => { held = true; navigator.vibrate?.(25); openOptions(t); }, 500); });
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => b.addEventListener(ev, () => clearTimeout(holdT)));
+        b.addEventListener('contextmenu', e => e.preventDefault());
+        b.addEventListener('click', () => { if (!held) openApp(t); });
         return b;
       }));
     } catch {}
   }
+  const api = (url, body, method = 'POST') => fetch(url, {
+    method, headers: { 'Content-Type': 'application/json', 'X-Remote-Key': key }, body: body ? JSON.stringify(body) : undefined,
+  });
+  async function openApp(t) { closeSheets(); await api('/api/open', { id: t.id }); }
+
+  // ---------- app options (long-press) ----------
+  let optTile = null, removeArmed = false;
+  function openOptions(t) {
+    optTile = t; removeArmed = false;
+    $('#optTitle').textContent = t.name;
+    $('#optMsg').textContent = '';
+    document.querySelector('[data-opt="remove"]').classList.remove('armed');
+    $('#appsSheet').hidden = true;
+    $('#optSheet').hidden = false;
+  }
+  document.querySelectorAll('[data-opt]').forEach(b => b.addEventListener('click', async () => {
+    const t = optTile; if (!t) return;
+    const o = b.dataset.opt;
+    if (o === 'open') return openApp(t);
+    if (o === 'remove') {
+      if (!removeArmed) { removeArmed = true; b.classList.add('armed'); $('#optMsg').textContent = `Tap again to remove “${t.name}”`; return; }
+      await api('/api/tiles/' + t.id, null, 'DELETE');
+      closeSheets(); return;
+    }
+    const body = o === 'first' ? { to: 0 } : { by: o === 'left' ? -1 : 1 };
+    await api(`/api/tiles/${t.id}/move`, body);
+    $('#optMsg').textContent = 'Moved';
+    setTimeout(() => { if (!$('#optSheet').hidden) $('#optMsg').textContent = ''; }, 1200);
+  }));
+
+  $('#restoreApps').addEventListener('click', async () => {
+    const r = await (await api('/api/tiles/restore', {})).json().catch(() => ({}));
+    $('#restoreApps').textContent = r.restored?.length ? `Restored ${r.restored.join(', ')}` : 'Nothing to restore';
+    setTimeout(() => ($('#restoreApps').textContent = 'Restore removed built-in apps'), 2500);
+    loadApps();
+  });
+
   // ---------- one-tap restart ----------
   $('#restartBtn').addEventListener('click', () => {
     $('#restartBtn').classList.add('spin');
@@ -364,6 +413,13 @@
 
   $('#appsBtn').addEventListener('click', () => { loadApps(); $('#kbSheet').hidden = true; $('#addSheet').hidden = true; $('#appsSheet').hidden = false; });
 
+  $('#tOpen').addEventListener('click', async () => {
+    const url = $('#tUrl').value.trim();
+    if (!url) { $('#tMsg').textContent = 'Enter a web address'; return; }
+    const r = await api('/api/open-url', { url, tv: $('#tTv').checked }).catch(() => null);
+    if (!r || !r.ok) { $('#tMsg').textContent = 'That web address looks invalid'; return; }
+    closeSheets();
+  });
   $('#tSave').addEventListener('click', async () => {
     const url = $('#tUrl').value.trim();
     if (!url) { $('#tMsg').textContent = 'Enter a URL'; return; }

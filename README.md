@@ -29,7 +29,8 @@ A laptop or mini-PC plugged into a TV is a great media player, until you have to
 - **Keyboard pops up by itself** when a text field is selected on the TV (email, password, search), and one-time-code fields get your phone's SMS code suggestion
 - **D-pad works on normal websites** such as Netflix, Disney+ and Vidio: a focus ring, real hover previews, and row scrolling
 - **YouTube's TV interface** (youtube.com/tv) in full screen
-- **Add any website** as a tile, from the TV or from your phone
+- **Add any website** as a tile, or just open a link once without saving it, from the TV or your phone
+- **Hold OK for app options**: open, move (← → to reorder) or remove an app. On the phone, hold an app in the ▦ list
 - **PC status on both screens**: battery, Wi-Fi name, signal, and ping
 - **Incognito mode** for guests: one press restarts the TV browser with an empty profile (no logins, history or cookies). Turning it off brings your accounts back and deletes everything from the session
 - **Power controls**: reload the page, restart, sleep, restart or shut down the PC from your phone
@@ -81,7 +82,8 @@ The first time you open each service, sign in on the TV. Your logins are kept.
 
 | Remote | Does |
 |---|---|
-| D-pad / OK | Move and select (hold to repeat) |
+| D-pad / OK | Move and select (hold the arrows to repeat) |
+| Hold OK | App options on TV Home: open, move, remove |
 | Back / Home | Go back · return to the home screen |
 | ▶❚❚ · − 🔇 + | Play/pause · volume |
 | Touchpad | Drag = move, tap = click, two-finger tap = right-click, two-finger drag = scroll |
