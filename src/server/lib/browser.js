@@ -182,6 +182,7 @@ let uiScale = null;       // kiosk zoom (Chrome --force-device-scale-factor); nu
 let launchedScale = null; // the scale the running kiosk was started with
 let windowPos = null;      // {x, y}: open the kiosk on the display containing this point
 let launchedPos = null;
+let secureDns = 'off';     // DNS over HTTPS for the kiosk: 'off' (the PC's DNS) or a provider below
 let incognito = false;     // private session: a throwaway profile, wiped when it ends
 
 // Incognito uses its own empty profile folder. It is wiped before every incognito
@@ -218,14 +219,40 @@ function findBrowser() {
   return { path: found, name: /edge/i.test(found) ? 'Microsoft Edge' : /chromium/i.test(found) ? 'Chromium' : 'Google Chrome' };
 }
 
+// Secure DNS (DNS over HTTPS). The kiosk has its own browser profile, so a DNS
+// setting made in your everyday Chrome/Edge doesn't apply to it. Sites blocked by
+// the ISP's DNS (e.g. Reddit in some countries) open with this on.
+const DOH = {
+  cloudflare: 'https://cloudflare-dns.com/dns-query',
+  google: 'https://dns.google/dns-query{?dns}',
+  quad9: 'https://dns.quad9.net/dns-query',
+  adguard: 'https://dns.adguard-dns.com/dns-query',
+};
+// Chrome and Edge keep this in the profile's "Local State" file, read at start-up.
+function applySecureDns(dir) {
+  const file = path.join(dir, 'Local State');
+  let st = {};
+  try { st = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
+  const want = DOH[secureDns]
+    ? { mode: 'secure', templates: DOH[secureDns] }
+    : { mode: 'automatic', templates: '' };
+  const cur = st.dns_over_https || {};
+  if (cur.mode === want.mode && (cur.templates || '') === want.templates) return;
+  st.dns_over_https = { ...cur, ...want };
+  try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(file, JSON.stringify(st)); }
+  catch (e) { console.warn('[browser] could not set secure DNS:', e.message); }
+}
+
 function launch() {
   const b = findBrowser();
   if (!b) { console.error('[browser] Chrome/Edge not found.'); return false; }
   if (incognito) wipeIncognito(); // every incognito launch starts empty
+  // separate profile per browser; incognito gets a throwaway one
+  const dataDir = incognito ? incognitoDir() : `${profileDir}-${/edge/i.test(b.name) ? 'edge' : 'chrome'}`;
+  applySecureDns(dataDir);
   const args = [
     '--kiosk', homeUrl,
-    // separate profile per browser; incognito gets a throwaway one
-    `--user-data-dir=${incognito ? incognitoDir() : `${profileDir}-${/edge/i.test(b.name) ? 'edge' : 'chrome'}`}`,
+    `--user-data-dir=${dataDir}`,
     `--remote-debugging-port=${CDP_PORT}`,
     '--no-first-run', '--no-default-browser-check',
     '--autoplay-policy=no-user-gesture-required',
@@ -398,6 +425,17 @@ module.exports = {
     return true;
   },
 
+  /** Secure DNS provider for the kiosk ('off' | 'cloudflare' | 'google' | 'quad9' | 'adguard'); restarts it. */
+  async setSecureDns(v, { restart = false } = {}) {
+    v = DOH[v] ? v : 'off';
+    if (v === secureDns) return false;
+    secureDns = v;
+    if (!restart || !conn) return false;
+    console.log(`[browser] secure DNS -> ${v}, restarting the kiosk`);
+    await module.exports.restartBrowser();
+    return true;
+  },
+
   /** Incognito: restart the kiosk with an empty throwaway profile (or back to the normal one). */
   isIncognito: () => incognito,
   async setIncognito(on) {
@@ -427,7 +465,8 @@ module.exports = {
       await call('Runtime.evaluate', { expression: `window.__pctvSetYtMode && window.__pctvSetYtMode('${ytMode}')` });
     } catch {}
   },
-  init({ home, kiosk, profileDir: dir, browserPath, browserPreference, youtubeFill, uiScale: scale, windowPosition }) {
+  init({ home, kiosk, profileDir: dir, browserPath, browserPreference, youtubeFill, uiScale: scale, windowPosition, secureDns: dns }) {
+    if (DOH[dns]) secureDns = dns;
     if (scale) uiScale = scale;
     if (windowPosition) windowPos = windowPosition;
     if (browserPreference) module.exports.setPreference(browserPreference);

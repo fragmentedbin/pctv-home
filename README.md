@@ -116,6 +116,11 @@ Websites are made for a desk, not a couch. **TV size** in the control panel is s
 With two or more displays connected, a **Screen** button appears in the top bar of TV Home (press Up from the apps row). Pick the TV or monitor and TV Home restarts there. The choice is remembered. You can also choose it in the control panel or in the phone remote's ⏻ menu.
 </details>
 
+<details><summary><b>A site opens in my normal browser but not on TV Home</b></summary>
+
+TV Home uses its own browser profile, so settings from your everyday Chrome or Edge (like Secure DNS) don't carry over. If your internet provider blocks a site through DNS, set **Secure DNS** in the control panel to Cloudflare, Google, Quad9 or AdGuard. TV Home restarts with it.
+</details>
+
 <details><summary><b>Netflix quality is low</b></summary>
 
 On Windows, Netflix in Chrome is limited to 720p; Edge supports 1080p and 4K. In the control panel, set **Browser for streaming** to **Microsoft Edge**.

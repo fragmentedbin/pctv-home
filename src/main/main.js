@@ -15,7 +15,7 @@ app.setAppUserModelId('com.fragmentedbin.pctvhome');
 
 // ---------- settings ----------
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
-let settings = { openOnStart: true, firstRun: true, browser: 'auto', youtubeFill: 'auto', uiScale: 'auto', display: 'primary' };
+let settings = { openOnStart: true, firstRun: true, browser: 'auto', youtubeFill: 'auto', uiScale: 'auto', display: 'primary', secureDns: 'off' };
 
 // ---------- TV size (kiosk UI scale) ----------
 // 'auto' sizes websites for viewing from the couch on whatever screen the kiosk is
@@ -183,6 +183,7 @@ app.whenReady().then(async () => {
     kiosk: settings.openOnStart && !(settings.firstRun && !startedInBackground),
     browserPreference: settings.browser,
     youtubeFill: settings.youtubeFill,
+    secureDns: settings.secureDns,
     uiScale: effectiveScale(),
     windowPosition: kioskPosition(effectiveScale()),
     watchDir: DEV ? path.join(__dirname, '..') : null,
@@ -193,6 +194,7 @@ app.whenReady().then(async () => {
         openOnStart: settings.openOnStart,
         browser: settings.browser,
         youtubeFill: settings.youtubeFill,
+        secureDns: settings.secureDns,
         uiScale: settings.uiScale,
         uiScaleEffective: effectiveScale(),
         display: (() => { const d = kioskDisplay(); return { width: d.size.width * d.scaleFactor, height: d.size.height * d.scaleFactor, osScale: d.scaleFactor }; })(),
@@ -220,6 +222,9 @@ app.whenReady().then(async () => {
         }
         if (['auto', 'zoom', 'stretch', 'fit'].includes(body.youtubeFill)) {
           settings.youtubeFill = body.youtubeFill; saveSettings(); await server.setYoutubeFill(body.youtubeFill);
+        }
+        if (['off', 'cloudflare', 'google', 'quad9', 'adguard'].includes(body.secureDns)) {
+          settings.secureDns = body.secureDns; saveSettings(); await server.setSecureDns(body.secureDns);
         }
         if (body.action === 'accessibility') {
           systemPreferences.isTrustedAccessibilityClient(true);

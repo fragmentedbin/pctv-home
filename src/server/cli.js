@@ -14,6 +14,7 @@ const srv = createServer({
   port: process.env.PORT,
   host: process.env.HOST,
   kiosk: args.includes('--kiosk'),
+  secureDns: process.env.PCTV_SECURE_DNS,
   watchDir: args.includes('--no-watch') ? null : path.join(__dirname, '..'),
   onRestart() {
     spawn(process.execPath, process.argv.slice(1), { stdio: 'inherit' });

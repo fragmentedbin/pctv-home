@@ -60,6 +60,8 @@
     $('#openOnStart').checked = st.openOnStart !== false;
     if (st.browser) $('#browserPref').value = st.browser;
     if (st.youtubeFill) $('#ytFill').value = st.youtubeFill;
+    if (st.secureDns) $('#secureDns').value = st.secureDns;
+    $('#secureDns').closest('.select').style.display = st.secureDns ? '' : 'none';
     if (st.uiScale !== undefined) {
       $('#uiScale').value = String(st.uiScale);
       const eff = st.uiScaleEffective ? Math.round(st.uiScaleEffective * 100) + '%' : 'system scaling';
@@ -96,6 +98,7 @@
     const v = e.target.value;
     post('/api/app', { uiScale: v === 'auto' || v === 'system' ? v : Number(v) }).then(refresh);
   };
+  $('#secureDns').onchange = e => post('/api/app', { secureDns: e.target.value }).then(refresh);
   $('#ytFill').onchange = e => post('/api/app', { youtubeFill: e.target.value }).then(refresh);
   $('#browserPref').onchange = e => post('/api/app', { browser: e.target.value }).then(refresh);
   $('#openOnStart').onchange = e => post('/api/app', { openOnStart: e.target.checked }).then(refresh);

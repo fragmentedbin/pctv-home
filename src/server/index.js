@@ -355,6 +355,7 @@ function createServer(opts) {
           browserPath: opts.browserPath,
           browserPreference: opts.browserPreference,
           youtubeFill: opts.youtubeFill,
+          secureDns: opts.secureDns,
           uiScale: opts.uiScale,
           windowPosition: opts.windowPosition,
         });
@@ -374,6 +375,7 @@ function createServer(opts) {
     start, stop, events, system, broadcast,
     setBrowserPreference: p => browser.setPreference(p),
     setYoutubeFill: m => browser.setYoutubeFill(m),
+    setSecureDns: v => browser.setSecureDns(v, { restart: true }),
     setUiScale: (f, o) => browser.setUiScale(f, o),
     setKioskPlacement: (p, o) => browser.setPlacement(p, o),
     info: () => ({ remoteUrl: remoteUrl(), homeUrl: `http://localhost:${PORT}/`, port: PORT, remotes: remoteCount() }),
