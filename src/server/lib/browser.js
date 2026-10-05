@@ -67,6 +67,20 @@ const FOCUS_SCRIPT = `(() => {
       de.style.setProperty('--pctv-zx', String(x));
       de.style.setProperty('--pctv-zy', String(y));
     };
+    // YouTube's TV app asks the TV (Cobalt's h5vcc API) how big the screen is and caps
+    // the quality list to that; a browser has no such API, so it guesses low. Report the
+    // real screen in physical pixels (same approach as the VacuumTube project).
+    if (!window.h5vcc) {
+      const screenRes = () => {
+        const w = Math.round(Math.max(screen.width, screen.height) * devicePixelRatio);
+        const h = Math.round(Math.min(screen.width, screen.height) * devicePixelRatio);
+        for (const [a, b] of [[1280, 720], [1920, 1080], [2560, 1440], [3840, 2160], [7680, 4320]]) {
+          if (w <= a && h <= b) return a + 'x' + b;
+        }
+        return w + 'x' + h;
+      };
+      window.h5vcc = { runtime: {}, system: { getVideoContainerSizeOverride: screenRes } };
+    }
     window.__pctvSetYtMode = m => { mode = m; lastKey = ''; fit(); };
     fit();
     addEventListener('resize', fit);
