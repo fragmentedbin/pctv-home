@@ -9,7 +9,9 @@ module.exports = {
   //   node scripts/gen-keys.js
   // and paste the printed public key here. null = supporter feature switched off
   // (no watermark, no prompts), so a fork without keys is never nagged.
-  PUBLIC_KEY_PEM: null,
+  PUBLIC_KEY_PEM: `-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAVGFARVv+NJIWjf2SgvvmWa6CjjXsZEM9Y08iGOm9vSM=
+-----END PUBLIC KEY-----`,
 
   // Salt for the device id hash. Changing it changes every device id and
   // invalidates every code issued so far.
