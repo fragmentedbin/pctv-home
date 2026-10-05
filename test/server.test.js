@@ -40,7 +40,7 @@ test('tiles: defaults, add, delete', async () => {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: 'Example', url: 'example.com' }),
   })).json();
-  assert.equal(add.url, 'https://example.com');
+  assert.equal(add.url, 'https://example.com/');
   await fetch(`${base}/api/tiles/${add.id}`, { method: 'DELETE' });
   const after = await (await fetch(`${base}/api/tiles`)).json();
   assert.ok(!after.some(t => t.id === add.id));
@@ -56,6 +56,19 @@ test('tiles: defaults, add, delete', async () => {
   assert.ok(!(await (await fetch(`${base}/api/tiles`)).json()).some(t => t.id === 'netflix'));
   await post('/api/tiles/reset', {});
   assert.equal(ids(await (await fetch(`${base}/api/tiles`)).json())[1], 'netflix');
+});
+
+test('typed addresses work like a browser address bar', () => {
+  const { resolveAddress: r } = require('../src/server/lib/address');
+  assert.equal(r('google'), 'https://www.google.com/search?q=google');
+  assert.equal(r('google', { shortcut: true }), 'https://google.com/');
+  assert.equal(r('Google.com'), 'https://google.com/');
+  assert.equal(r('netflix.com/browse'), 'https://netflix.com/browse');
+  assert.equal(r('detik.co.id'), 'https://detik.co.id/');
+  assert.equal(r('lofi hip hop'), 'https://www.google.com/search?q=lofi%20hip%20hop');
+  assert.equal(r('192.168.1.5:8080'), 'http://192.168.1.5:8080/');
+  assert.equal(r('javascript:alert(1)'), 'https://www.google.com/search?q=javascript%3Aalert(1)');
+  assert.equal(r('  '), null);
 });
 
 test('invalid tile url is rejected', async () => {

@@ -1,5 +1,6 @@
 // PCTV Home server: TV home screen + phone remote over HTTP/WebSocket.
 // Hosted by the desktop app (src/main) or run headless for development (src/server/cli.js).
+const { resolveAddress } = require('./lib/address');
 const express = require('express');
 const http = require('http');
 const os = require('os');
@@ -130,10 +131,10 @@ function createServer(opts) {
   app.post('/api/tiles', auth, (req, res) => {
     let { name, url, color, tv, icon } = req.body || {};
     name = String(name || '').trim().slice(0, 40);
-    url = String(url || '').trim();
-    if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
-    try { new URL(url); } catch { return res.status(400).json({ error: 'invalid url' }); }
-    if (!name) name = new URL(url).hostname.replace(/^www\./, '');
+    const typed = String(url || '').trim();
+    url = resolveAddress(typed, { shortcut: true });
+    if (!url) return res.status(400).json({ error: 'Type a web address or a name' });
+    if (!name) name = /^https:\/\/www\.google\.com\/search\?/.test(url) ? typed : new URL(url).hostname.replace(/^www\./, '');
     if (!/^#[0-9a-f]{6}$/i.test(color || '')) color = '#2b2f3a';
     icon = String(icon || '').trim();
     if (icon && !/^https?:\/\//i.test(icon)) icon = '';
@@ -186,9 +187,8 @@ function createServer(opts) {
 
   // open any web address without making a shortcut
   app.post('/api/open-url', auth, async (req, res) => {
-    let url = String(req.body?.url || '').trim();
-    if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
-    try { if (!/^https?:$/.test(new URL(url).protocol)) throw 0; } catch { return res.status(400).json({ error: 'invalid url' }); }
+    const url = resolveAddress(req.body?.url); // a web address, or a Google search for anything else
+    if (!url) return res.status(400).json({ error: 'Type a web address or something to search' });
     try { await browser.open(url, !!req.body?.tv); res.json({ ok: true, via: 'cdp' }); }
     catch { res.json({ ok: false, url }); }
   });

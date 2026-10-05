@@ -290,7 +290,7 @@
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: $('#fName').value, url, color: addColor, tv: $('#fTv').checked }),
     });
-    if (!r.ok) { toast('That web address looks invalid'); return setFocus($('#fUrl')); }
+    if (!r.ok) { toast('Type a web address or something to search'); return setFocus($('#fUrl')); }
     closeDialogs();
     lastMainFocus = document.querySelectorAll('.top .focusable').length + tiles.length; // the new tile
     await loadTiles();
@@ -343,7 +343,7 @@
     const r = await fetch('/api/open-url', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, tv: $('#fTv').checked }),
     }).catch(() => null);
-    if (!r || !r.ok) { toast('That web address looks invalid'); return setFocus($('#fUrl')); }
+    if (!r || !r.ok) { toast('Type a web address or something to search'); return setFocus($('#fUrl')); }
     const j = await r.json();
     closeDialogs();
     if (!j.ok) location.href = j.url; // no DevTools connection: plain navigation

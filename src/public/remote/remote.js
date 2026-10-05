@@ -413,16 +413,17 @@
 
   $('#appsBtn').addEventListener('click', () => { loadApps(); $('#kbSheet').hidden = true; $('#addSheet').hidden = true; $('#appsSheet').hidden = false; });
 
+  $('#tUrl').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#tOpen').click(); } });
   $('#tOpen').addEventListener('click', async () => {
     const url = $('#tUrl').value.trim();
-    if (!url) { $('#tMsg').textContent = 'Enter a web address'; return; }
+    if (!url) { $('#tMsg').textContent = 'Type a web address or something to search'; return; }
     const r = await api('/api/open-url', { url, tv: $('#tTv').checked }).catch(() => null);
-    if (!r || !r.ok) { $('#tMsg').textContent = 'That web address looks invalid'; return; }
+    if (!r || !r.ok) { $('#tMsg').textContent = 'Type a web address or something to search'; return; }
     closeSheets();
   });
   $('#tSave').addEventListener('click', async () => {
     const url = $('#tUrl').value.trim();
-    if (!url) { $('#tMsg').textContent = 'Enter a URL'; return; }
+    if (!url) { $('#tMsg').textContent = 'Type a web address or a name'; return; }
     try {
       const r = await fetch('/api/tiles', {
         method: 'POST',
