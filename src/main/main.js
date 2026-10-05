@@ -1,6 +1,6 @@
 // PCTV Home desktop app: runs the TV/remote server in the background (tray /
 // menu bar), opens the kiosk browser, and shows a small control panel for pairing.
-const { app, BrowserWindow, Tray, Menu, nativeImage, shell, dialog, systemPreferences } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, shell, dialog, systemPreferences, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { createServer } = require('../server');
@@ -15,7 +15,46 @@ app.setAppUserModelId('com.fragmentedbin.pctvhome');
 
 // ---------- settings ----------
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
-let settings = { openOnStart: true, firstRun: true, browser: 'auto' };
+let settings = { openOnStart: true, firstRun: true, browser: 'auto', youtubeFill: 'auto', uiScale: 'auto' };
+
+// ---------- TV size (kiosk UI scale) ----------
+// 'auto' sizes websites for viewing from the couch on whatever screen the kiosk is
+// on: the page gets ~1280×720 CSS pixels (1080p TV → 150%, 4K → 300%), no matter
+// what Windows/macOS scaling each display uses. A number forces a scale, 'system'
+// leaves it to the OS.
+const SCALES = ['auto', 'system', 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+function kioskDisplay() {
+  // the kiosk opens on the primary display; with a TV/monitor attached that's usually the one you want
+  return screen.getPrimaryDisplay();
+}
+function autoScale() {
+  const d = kioskDisplay();
+  const w = d.size.width * d.scaleFactor, h = d.size.height * d.scaleFactor; // physical pixels
+  const f = Math.min(w / 1280, h / 720);
+  return Math.min(3, Math.max(1, Math.round(f * 4) / 4)); // steps of 25 %
+}
+function effectiveScale() {
+  if (settings.uiScale === 'system') return null;
+  if (settings.uiScale === 'auto') return autoScale();
+  return Number(settings.uiScale) || null;
+}
+let displayTimer = null;
+function watchDisplays() {
+  const changed = () => {
+    clearTimeout(displayTimer);
+    displayTimer = setTimeout(async () => { // wait until Windows has finished re-arranging the screens
+      if (settings.uiScale !== 'auto') return;
+      try {
+        if (await server.setUiScale(effectiveScale(), { restart: true })) {
+          console.log('[display] screen changed, kiosk restarted at', effectiveScale());
+        }
+      } catch (e) { console.error('[display]', e.message); }
+    }, 2500);
+  };
+  screen.on('display-added', changed);
+  screen.on('display-removed', changed);
+  screen.on('display-metrics-changed', changed);
+}
 function loadSettings() {
   try { settings = { ...settings, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }; } catch {}
 }
@@ -113,6 +152,8 @@ app.whenReady().then(async () => {
     port: PORT,
     kiosk: settings.openOnStart && !(settings.firstRun && !startedInBackground),
     browserPreference: settings.browser,
+    youtubeFill: settings.youtubeFill,
+    uiScale: effectiveScale(),
     watchDir: DEV ? path.join(__dirname, '..') : null,
     onRestart: restart,
     app: {
@@ -120,6 +161,10 @@ app.whenReady().then(async () => {
         startAtLogin: getStartAtLogin(),
         openOnStart: settings.openOnStart,
         browser: settings.browser,
+        youtubeFill: settings.youtubeFill,
+        uiScale: settings.uiScale,
+        uiScaleEffective: effectiveScale(),
+        display: (() => { const d = kioskDisplay(); return { width: d.size.width * d.scaleFactor, height: d.size.height * d.scaleFactor, osScale: d.scaleFactor }; })(),
         store: isStore,
         packaged: app.isPackaged,
         accessibility: process.platform === 'darwin' ? systemPreferences.isTrustedAccessibilityClient(false) : null,
@@ -129,6 +174,13 @@ app.whenReady().then(async () => {
         if (typeof body.openOnStart === 'boolean') { settings.openOnStart = body.openOnStart; saveSettings(); }
         if (['auto', 'chrome', 'edge'].includes(body.browser)) {
           settings.browser = body.browser; saveSettings(); server.setBrowserPreference(body.browser);
+        }
+        if (body.uiScale !== undefined && SCALES.includes(body.uiScale)) {
+          settings.uiScale = body.uiScale; saveSettings();
+          await server.setUiScale(effectiveScale(), { restart: true });
+        }
+        if (['auto', 'zoom', 'stretch', 'fit'].includes(body.youtubeFill)) {
+          settings.youtubeFill = body.youtubeFill; saveSettings(); await server.setYoutubeFill(body.youtubeFill);
         }
         if (body.action === 'accessibility') {
           systemPreferences.isTrustedAccessibilityClient(true);
@@ -152,6 +204,7 @@ app.whenReady().then(async () => {
   }
 
   buildTray();
+  watchDisplays();
   ensureAccessibility();
   if (settings.firstRun || !startedInBackground) showPanel(); // first run: show how to pair
   if (settings.firstRun) { settings.firstRun = false; saveSettings(); }

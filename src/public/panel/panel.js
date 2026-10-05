@@ -42,6 +42,14 @@
     $('#startAtLogin').checked = !!st.startAtLogin;
     $('#openOnStart').checked = st.openOnStart !== false;
     if (st.browser) $('#browserPref').value = st.browser;
+    if (st.youtubeFill) $('#ytFill').value = st.youtubeFill;
+    if (st.uiScale !== undefined) {
+      $('#uiScale').value = String(st.uiScale);
+      const eff = st.uiScaleEffective ? Math.round(st.uiScaleEffective * 100) + '%' : 'system scaling';
+      $('#uiScaleHint').textContent = `Now ${eff} on a ${st.display.width}×${st.display.height} screen. Auto adjusts when you plug in a monitor.`;
+    }
+    $('#uiScale').closest('.select').style.display = st.uiScale !== undefined ? '' : 'none';
+    $('#ytFill').closest('.select').style.display = st.youtubeFill ? '' : 'none';
     $('#browserPref').closest('.select').style.display = st.browser ? '' : 'none';
     $('#startAtLogin').closest('.toggle').classList.toggle('disabled', st.startAtLogin === undefined);
   }
@@ -61,6 +69,11 @@
     $('#qr').src = '/api/qr.svg?' + Date.now(); refresh();
   };
   $('#startAtLogin').onchange = e => post('/api/app', { startAtLogin: e.target.checked }).then(refresh);
+  $('#uiScale').onchange = e => {
+    const v = e.target.value;
+    post('/api/app', { uiScale: v === 'auto' || v === 'system' ? v : Number(v) }).then(refresh);
+  };
+  $('#ytFill').onchange = e => post('/api/app', { youtubeFill: e.target.value }).then(refresh);
   $('#browserPref').onchange = e => post('/api/app', { browser: e.target.value }).then(refresh);
   $('#openOnStart').onchange = e => post('/api/app', { openOnStart: e.target.checked }).then(refresh);
   document.querySelectorAll('[data-url]').forEach(a => a.onclick = e => { e.preventDefault(); openUrl(a.dataset.url); });

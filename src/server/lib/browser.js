@@ -42,11 +42,36 @@ const FOCUS_SCRIPT = `(() => {
   let rules = 'html.__tv-idle, html.__tv-idle * { cursor: none !important; }' +
     '* { scrollbar-width: none !important; }' +
     '::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }';
-  // YouTube TV locks its UI to a centred 16:9 box -> black bands on 16:10 screens.
-  if (location.hostname.endsWith('youtube.com') && location.pathname.startsWith('/tv')) {
-    rules += '#container, #app-background { margin: 0 !important; top: 0 !important; left: 0 !important;' +
-             ' width: 100vw !important; height: 100vh !important; }' +
-             'html, body { overflow: hidden !important; }'; // the TV app never scrolls the page
+  // YouTube TV draws a fixed 16:9 UI. On other screen shapes (16:10 laptops,
+  // ultrawide) fill the screen: 'auto' stretches menus (nothing gets cut off)
+  // and zooms while a video plays (no distortion); 'zoom' / 'stretch' / 'fit' force one.
+  const ytTv = location.hostname.endsWith('youtube.com') && location.pathname.startsWith('/tv');
+  if (ytTv && window.top === window) {
+    rules += '#container, #app-background { transform: scale(var(--pctv-zx, 1), var(--pctv-zy, 1)) !important;' +
+             ' transform-origin: 50% 50% !important; transition: transform .35s ease !important; }' +
+             'html, body { overflow: hidden !important; background: #000 !important; }';
+    let mode = '__PCTV_YT_MODE__';
+    let lastKey = '';
+    const fit = () => {
+      const de = document.documentElement;
+      if (!de) return;
+      const w = Math.min(innerWidth, innerHeight * 16 / 9), h = w * 9 / 16;
+      const sx = innerWidth / w, sy = innerHeight / h;
+      const watching = location.hash.startsWith('#/watch');
+      const m = mode === 'auto' ? (watching ? 'zoom' : 'stretch') : mode;
+      const z = Math.max(sx, sy);
+      const [x, y] = m === 'zoom' ? [z, z] : m === 'stretch' ? [sx, sy] : [1, 1];
+      const key = x + ',' + y;
+      if (key === lastKey) return;
+      lastKey = key;
+      de.style.setProperty('--pctv-zx', String(x));
+      de.style.setProperty('--pctv-zy', String(y));
+    };
+    window.__pctvSetYtMode = m => { mode = m; lastKey = ''; fit(); };
+    fit();
+    addEventListener('resize', fit);
+    addEventListener('DOMContentLoaded', fit);
+    setInterval(fit, 400); // the TV app changes routes with pushState, so poll the hash
   }
   try { // every frame, so embedded iframes lose their scrollbars too
     const sheet = new CSSStyleSheet();
@@ -108,6 +133,9 @@ const isHome = u => { try { const x = new URL(u); return x.origin + x.pathname =
 let profileDir = null;
 let forcedBrowser = null;
 let preference = 'auto'; // 'auto' | 'chrome' | 'edge'
+let ytMode = 'auto';      // YouTube TV fill: 'auto' | 'zoom' | 'stretch' | 'fit'
+let uiScale = null;       // kiosk zoom (Chrome --force-device-scale-factor); null = use Windows/macOS scaling
+let launchedScale = null; // the scale the running kiosk was started with
 
 /** Locate Chrome or Edge on Windows / macOS / Linux. Returns {path, name} or null. */
 function findBrowser() {
@@ -148,6 +176,9 @@ function launch() {
     '--overscroll-history-navigation=0',
     '--hide-scrollbars',
   ];
+  // Same physical size on every screen: websites are made for a desk, the TV is far away.
+  if (uiScale) args.push(`--force-device-scale-factor=${uiScale}`);
+  launchedScale = uiScale;
   console.log(`[browser] launching ${b.name} in kiosk mode`);
   spawn(b.path, args, { detached: true, stdio: 'ignore' }).unref();
   return true;
@@ -198,8 +229,9 @@ async function connect() {
     await call('Runtime.enable');
     await call('Runtime.addBinding', { name: '__tvFocus' });
     await call('Runtime.addBinding', { name: '__tvHover' });
-    await call('Page.addScriptToEvaluateOnNewDocument', { source: FOCUS_SCRIPT });
-    await call('Runtime.evaluate', { expression: FOCUS_SCRIPT }); // page already open
+    const page = FOCUS_SCRIPT.replace('__PCTV_YT_MODE__', ytMode);
+    c.pageScriptId = (await call('Page.addScriptToEvaluateOnNewDocument', { source: page })).identifier;
+    await call('Runtime.evaluate', { expression: page }); // page already open
     await call('Page.addScriptToEvaluateOnNewDocument', { source: NAV_SCRIPT });
     await call('Runtime.evaluate', { expression: NAV_SCRIPT });
   } catch (e) { console.warn('[browser] focus hook failed:', e.message); }
@@ -235,13 +267,38 @@ async function closeExtraPages() {
 }
 
 module.exports = {
+  FOCUS_SCRIPT, // exported for tests
   events,
   focusState: () => focusState,
   connected: () => !!conn,
   findBrowser,
   setPreference(p) { preference = ['chrome', 'edge'].includes(p) ? p : 'auto'; },
-  init({ home, kiosk, profileDir: dir, browserPath, browserPreference }) {
+  /**
+   * Set the kiosk's UI scale (1 = 100%). The browser only reads it at start-up, so a
+   * running kiosk is restarted (back to the home screen) when `restart` is true.
+   */
+  async setUiScale(f, { restart = false } = {}) {
+    uiScale = f ? Math.min(4, Math.max(0.5, Number(f))) : null;
+    if (!restart || uiScale === launchedScale || !conn) return false;
+    console.log(`[browser] UI scale -> ${uiScale ?? 'system'}, restarting the kiosk`);
+    await module.exports.restartBrowser();
+    return true;
+  },
+  getUiScale: () => ({ wanted: uiScale, running: launchedScale }),
+
+  async setYoutubeFill(m) {
+    ytMode = ['zoom', 'stretch', 'fit'].includes(m) ? m : 'auto';
+    if (!conn) return;
+    try { // re-register for future pages and apply to the open one right away
+      if (conn.pageScriptId) await call('Page.removeScriptToEvaluateOnNewDocument', { identifier: conn.pageScriptId });
+      conn.pageScriptId = (await call('Page.addScriptToEvaluateOnNewDocument', { source: FOCUS_SCRIPT.replace('__PCTV_YT_MODE__', ytMode) })).identifier;
+      await call('Runtime.evaluate', { expression: `window.__pctvSetYtMode && window.__pctvSetYtMode('${ytMode}')` });
+    } catch {}
+  },
+  init({ home, kiosk, profileDir: dir, browserPath, browserPreference, youtubeFill, uiScale: scale }) {
+    if (scale) uiScale = scale;
     if (browserPreference) module.exports.setPreference(browserPreference);
+    if (youtubeFill) ytMode = youtubeFill;
     homeUrl = home;
     kioskEnabled = true; // Home/relaunch may (re)open the kiosk
     profileDir = dir;

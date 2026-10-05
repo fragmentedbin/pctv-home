@@ -303,6 +303,8 @@ function createServer(opts) {
           profileDir: path.join(DATA, 'browser-profile'),
           browserPath: opts.browserPath,
           browserPreference: opts.browserPreference,
+          youtubeFill: opts.youtubeFill,
+          uiScale: opts.uiScale,
         });
         setTimeout(() => input.park(), 4000);
         resolve({ port: PORT, remoteUrl: remoteUrl(), homeUrl: `http://localhost:${PORT}/` });
@@ -319,6 +321,8 @@ function createServer(opts) {
   return {
     start, stop, events, system, broadcast,
     setBrowserPreference: p => browser.setPreference(p),
+    setYoutubeFill: m => browser.setYoutubeFill(m),
+    setUiScale: (f, o) => browser.setUiScale(f, o),
     info: () => ({ remoteUrl: remoteUrl(), homeUrl: `http://localhost:${PORT}/`, port: PORT, remotes: remoteCount() }),
     openKiosk: () => browser.launchOrFocus(),
     closeKiosk: () => browser.closeBrowser(),

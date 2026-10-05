@@ -103,6 +103,11 @@ The first time you open each service, sign in on the TV. Your logins are kept.
 Give PCTV Home Accessibility access: *System Settings → Privacy & Security → Accessibility*, turn on PCTV Home, then restart it from the menu bar icon.
 </details>
 
+<details><summary><b>Apps look tiny on my TV or monitor</b></summary>
+
+Websites are made for a desk, not a couch. **TV size** in the control panel is set to **Auto** by default. It scales the kiosk so pages look the same size on any screen (150% on a 1080p TV, 300% on 4K), and it adjusts automatically when you plug in or unplug a monitor. The kiosk reopens on the home screen when that happens. You can also pick a fixed size (100–300%).
+</details>
+
 <details><summary><b>Netflix quality is low</b></summary>
 
 On Windows, Netflix in Chrome is limited to 720p; Edge supports 1080p and 4K. In the control panel, set **Browser for streaming** to **Microsoft Edge**.

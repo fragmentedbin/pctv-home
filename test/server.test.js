@@ -67,4 +67,6 @@ test('websocket hello', async () => {
 test('injected page scripts compile', () => {
   // these are injected into web pages as strings; make sure they're valid JS
   new Function(require('../src/server/lib/tv-nav'));
+  const { FOCUS_SCRIPT } = require('../src/server/lib/browser');
+  for (const mode of ['auto', 'zoom', 'stretch', 'fit']) new Function(FOCUS_SCRIPT.replace('__PCTV_YT_MODE__', mode));
 });

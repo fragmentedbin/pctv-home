@@ -37,7 +37,7 @@
     "server": "node src/server/cli.js",
     "server:kiosk": "node src/server/cli.js --kiosk",
     "test": "node --test --test-force-exit test/*.test.js",
-    "icons": "node scripts/make-icons.js",
+    "icons": "python3 scripts/make-icons.py",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win nsis",
     "dist:store": "electron-builder --win appx",
