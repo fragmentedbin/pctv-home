@@ -58,21 +58,27 @@ jobs:
     runs-on: macos-latest
     env:
       # Optional: add these secrets to sign + notarize with an Apple Developer ID.
-      CSC_LINK: ${{ secrets.MAC_CERT_P12_BASE64 }}
-      CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      # Only "is it set" is exposed here; the values go to the signed step alone, because
+      # an empty CSC_LINK makes electron-builder treat the project folder as the certificate.
+      HAS_MAC_CERT: ${{ secrets.MAC_CERT_P12_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - name: Build DMG (Developer ID signed + notarized)
-        if: ${{ env.CSC_LINK != '' }}
+        if: ${{ env.HAS_MAC_CERT == 'true' }}
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npx electron-builder --mac dmg --publish never -c.mac.notarize=true
       - name: Build DMG (ad-hoc signed)
-        if: ${{ env.CSC_LINK == '' }}
+        if: ${{ env.HAS_MAC_CERT != 'true' }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npx electron-builder --mac dmg --publish never -c.mac.identity=-
       - uses: actions/upload-artifact@v4
         with:
