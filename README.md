@@ -151,6 +151,10 @@ npm run dist:mac     # macOS .dmg (ad-hoc signed)
 
 The project layout, publishing steps and the Microsoft Store guide are in [docs/PUBLISHING.md](docs/PUBLISHING.md). Contributions are welcome; please read [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Credits
+
+YouTube TV quality and identity fixes are adapted from [VacuumTube](https://github.com/shy1132/VacuumTube) (MIT). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## License
 
 PCTV Home is **free for personal and other noncommercial use** under the [PolyForm Noncommercial License 1.0.0](LICENSE).

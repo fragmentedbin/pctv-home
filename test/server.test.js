@@ -69,4 +69,5 @@ test('injected page scripts compile', () => {
   new Function(require('../src/server/lib/tv-nav'));
   const { FOCUS_SCRIPT } = require('../src/server/lib/browser');
   for (const mode of ['auto', 'zoom', 'stretch', 'fit']) new Function(FOCUS_SCRIPT.replace('__PCTV_YT_MODE__', mode));
+  new Function(require('../src/server/lib/yt-tv')({ browserVersion: '141.0.0.0', version: '1.0.0' }));
 });

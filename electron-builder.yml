@@ -12,6 +12,7 @@ directories:
 files:
   - package.json
   - LICENSE
+  - THIRD_PARTY_NOTICES.md
   - src/**
   - "!**/*.map"
   - "!**/{test,tests,__tests__,docs,example,examples}/**"

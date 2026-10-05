@@ -7,6 +7,8 @@ const path = require('path');
 const WebSocket = require('ws');
 const { EventEmitter } = require('events');
 const NAV_SCRIPT = require('./tv-nav');
+const ytTvScript = require('./yt-tv');
+const APP_VERSION = require('../../../package.json').version;
 
 const events = new EventEmitter(); // emits 'focus' {editable, type, inputmode, autocomplete, name, label, maxlength}
 
@@ -243,7 +245,10 @@ async function connect() {
     await call('Runtime.enable');
     await call('Runtime.addBinding', { name: '__tvFocus' });
     await call('Runtime.addBinding', { name: '__tvHover' });
-    const page = FOCUS_SCRIPT.replace('__PCTV_YT_MODE__', ytMode);
+    if (!defaultUA) {
+      try { defaultUA = (await call('Browser.getVersion')).userAgent.replace('HeadlessChrome', 'Chrome'); } catch {}
+    }
+    const page = pageScript();
     c.pageScriptId = (await call('Page.addScriptToEvaluateOnNewDocument', { source: page })).identifier;
     await call('Runtime.evaluate', { expression: page }); // page already open
     await call('Page.addScriptToEvaluateOnNewDocument', { source: NAV_SCRIPT });
@@ -264,6 +269,12 @@ function call(method, params = {}) {
     c.ws.send(JSON.stringify({ id, method, params }));
     setTimeout(() => { if (c.pending.delete(id)) reject(new Error(`${method} timeout`)); }, 4000);
   });
+}
+
+// Everything injected into each page: focus/keyboard hook, pointer hide, YouTube TV fixes.
+function pageScript() {
+  const browserVersion = ((defaultUA || '').match(/(?:Chrome|Edg)\/([\d.]+)/) || [])[1];
+  return FOCUS_SCRIPT.replace('__PCTV_YT_MODE__', ytMode) + '\n' + ytTvScript({ browserVersion, version: APP_VERSION });
 }
 
 async function setUA(ua) {
@@ -305,7 +316,7 @@ module.exports = {
     if (!conn) return;
     try { // re-register for future pages and apply to the open one right away
       if (conn.pageScriptId) await call('Page.removeScriptToEvaluateOnNewDocument', { identifier: conn.pageScriptId });
-      conn.pageScriptId = (await call('Page.addScriptToEvaluateOnNewDocument', { source: FOCUS_SCRIPT.replace('__PCTV_YT_MODE__', ytMode) })).identifier;
+      conn.pageScriptId = (await call('Page.addScriptToEvaluateOnNewDocument', { source: pageScript() })).identifier;
       await call('Runtime.evaluate', { expression: `window.__pctvSetYtMode && window.__pctvSetYtMode('${ytMode}')` });
     } catch {}
   },
