@@ -169,7 +169,7 @@ function startWatermark() {
     try {
       const due = force ? !sup.isUnlocked() : sup.watermarkVisible();
       const show = due && await server.kioskForeground();
-      if (show) await watermark.show(); else await watermark.hide();
+      if (show) await watermark.show({ leftOnly: await server.kioskOnHome() }); else await watermark.hide();
     } catch (e) { console.warn('[watermark]', e.message); }
     finally { running = false; }
   };

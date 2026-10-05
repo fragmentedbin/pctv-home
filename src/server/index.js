@@ -406,6 +406,7 @@ function createServer(opts) {
   return {
     start, stop, events, system, broadcast, supporter,
     kioskForeground: () => browser.isForeground(),
+    kioskOnHome: async () => { try { const u = new URL(await browser.currentUrl()); return u.origin + u.pathname === `http://localhost:${PORT}/`; } catch { return false; } },
     setBrowserPreference: p => browser.setPreference(p),
     setYoutubeFill: m => browser.setYoutubeFill(m),
     setSecureDns: v => browser.setSecureDns(v, { restart: true }),

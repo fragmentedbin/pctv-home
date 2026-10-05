@@ -16,11 +16,11 @@ module.exports = {
   DEVICE_SALT: 'pctv-home/device-id/v1',
 
   // TV watermark (click-through, never blocks anything)
-  WATERMARK_TEXT: 'PCTV Home belum didukung. Dukung developer lewat remote HP.',
+  WATERMARK_TEXT: 'Dukung the developer',
   WATERMARK: {
     graceDays: 7,            // shown once 7 days have passed since the first run…
     graceLaunches: 15,       // …or after 15 launches, whichever comes first
-    moveEveryMs: 5 * 60e3,   // OLED safety: hop to another corner every ~5 min
+    moveEveryMs: 5 * 60e3,   // OLED safety: switch to the other bottom corner every ~5 min
   },
 
   // Support prompt on the phone remote

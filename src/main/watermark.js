@@ -1,12 +1,12 @@
 // Unsupported-copy watermark on the TV, like Windows' "Activate Windows":
-// small, 40 % opacity, click-through, never takes focus, never blocks anything.
-// It's a small transparent window in a corner (not a full-screen layer), so it
-// can't interfere with full-screen video. OLED safety: it fades to another
-// corner every few minutes and never sits in exactly the same spot.
+// plain gray text at 50 % opacity, no background, click-through, never takes focus, never blocks anything.
+// It's a small transparent window in a bottom corner (not a full-screen layer), so it
+// can't interfere with full-screen video. OLED safety: it fades to the other
+// bottom corner every few minutes and never sits in exactly the same spot.
 const { BrowserWindow } = require('electron');
 const path = require('path');
 
-const W = 620, H = 40, MARGIN = 26, JITTER = 22;
+const W = 360, H = 40, MARGIN_X = 40, MARGIN_Y = 64, JITTER = 22;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function createWatermark({ text, moveEveryMs = 5 * 60e3, getDisplay }) {
@@ -32,30 +32,37 @@ function createWatermark({ text, moveEveryMs = 5 * 60e3, getDisplay }) {
   function place() {
     const b = getDisplay().bounds;
     const j = () => Math.round(Math.random() * JITTER);
-    left = corner === 1 || corner === 2;          // 0 bottom-right, 1 bottom-left, 2 top-left, 3 top-right
-    const top = corner === 2 || corner === 3;
-    const x = left ? b.x + MARGIN + j() : b.x + b.width - W - MARGIN - j();
-    const y = top ? b.y + MARGIN + j() : b.y + b.height - H - MARGIN - j();
+    // bottom corners only, like Windows: the top edge is where TV Home and the
+    // apps keep their own menus, and the note shouldn't sit on top of them
+    left = corner === 1;                          // 0 bottom-right, 1 bottom-left
+    const top = false;
+    const x = left ? b.x + MARGIN_X + j() : b.x + b.width - W - MARGIN_X - j();
+    const y = top ? b.y + MARGIN_Y + j() : b.y + b.height - H - MARGIN_Y - j();
     win.setBounds({ x, y, width: W, height: H });
   }
   const run = js => win && !win.isDestroyed() && win.webContents.executeJavaScript(js).catch(() => {});
 
   return {
     get visible() { return visible; },
-    async show() {
+    /** @param {{leftOnly?: boolean}} o leftOnly: TV Home has its phone-remote card bottom-right */
+    async show(o = {}) {
       if (busy) return;
       busy = true;
       try {
         ensure();
         if (win.webContents.isLoading()) await new Promise(r => win.webContents.once('did-finish-load', r));
-        if (!visible) {
+        if (o.leftOnly && corner !== 1) { // keep clear of TV Home's own bottom-right card
+          if (visible) { await run('fadeOut()'); await sleep(900); }
+          corner = 1; place(); win.showInactive(); await run(`fadeIn(${left})`);
+          visible = true; lastMove = Date.now();
+        } else if (!visible) {
           place();
           win.showInactive();
           await run(`fadeIn(${left})`);
           visible = true; lastMove = Date.now();
         } else if (Date.now() - lastMove >= moveEveryMs) {
           await run('fadeOut()'); await sleep(900);
-          corner = (corner + 1 + Math.floor(Math.random() * 3)) % 4; // any other corner
+          if (!o.leftOnly) corner = 1 - corner; // the other bottom corner; on TV Home it just shifts a little
           place();
           await run(`fadeIn(${left})`);
           lastMove = Date.now();
