@@ -1,0 +1,65 @@
+# Publishing PCTV Home
+
+## 1. Push to GitHub
+
+```bash
+git remote add origin https://github.com/fragmentedbin/pctv-home.git
+git push -u origin main
+```
+
+## 2. Make a release
+
+1. Update `version` in `package.json` (e.g. `1.0.1`), then commit.
+2. Tag and push:
+   ```bash
+   git tag v1.0.1
+   git push origin v1.0.1
+   ```
+3. GitHub Actions builds the Windows installers (x64 + arm64) and the macOS DMGs (Apple Silicon + Intel), then creates a **draft release** with all files attached.
+4. Open *Releases* on GitHub, check the draft, and click **Publish**.
+
+## 3. Microsoft Store (free, and works with Smart App Control)
+
+Store apps are signed by Microsoft, so Windows trusts them even with Smart App Control on. Registering as an individual developer is free.
+
+1. Sign up at <https://storedeveloper.microsoft.com> as an **individual** developer.
+2. In [Partner Center](https://partner.microsoft.com/dashboard), go to **Apps and games → New product → MSIX or PWA app** and reserve the name **PCTV Home**.
+3. Open **Product management → Product identity** and copy:
+   - `Package/Identity/Name` → GitHub repository variable **`STORE_IDENTITY_NAME`**
+   - `Package/Identity/Publisher` (starts with `CN=`) → repository variable **`STORE_PUBLISHER`**
+
+   Set them under *Settings → Secrets and variables → Actions → Variables*.
+4. Run the **Build** workflow manually with **"Also build the Microsoft Store package"** ticked, or push a `v*` tag once the variables exist. Download the `.appx` file from the workflow artifacts.
+5. In Partner Center, create a submission:
+   - **Packages:** upload the `.appx`.
+   - **Properties:** category *Entertainment*; privacy policy URL `https://github.com/fragmentedbin/pctv-home/blob/main/PRIVACY.md`.
+   - **Store listing:** use `docs/images/*.jpg` as screenshots, and copy the description from the README.
+   - **Submission options → restricted capabilities:** explain `runFullTrust`: *"Desktop app (Electron). It runs a local web server for the phone remote, sends keyboard and mouse input to control the TV screen, and starts Chrome/Edge to play streaming services."*
+6. Submit. Certification usually takes 1–3 days.
+
+To build it locally instead: `npm run dist:store -- -c.appx.identityName=… -c.appx.publisher="CN=…"`.
+
+## 4. macOS signing (optional, paid)
+
+Without an Apple Developer ID, the DMG is ad-hoc signed and users have to click **Open Anyway** once. If you join the Apple Developer Program later, add these repository **secrets** and the workflow will sign and notarize automatically:
+
+| Secret | Value |
+|---|---|
+| `MAC_CERT_P12_BASE64` | Developer ID Application certificate (.p12), base64-encoded |
+| `MAC_CERT_PASSWORD` | Password of that .p12 |
+| `APPLE_ID` | Your Apple ID email |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password from appleid.apple.com |
+| `APPLE_TEAM_ID` | Your 10-character Team ID |
+
+## 5. Windows installer signing (optional)
+
+The `.exe` from GitHub Releases is unsigned. SmartScreen warns about it, and Smart App Control blocks it, which is why the Store version is the recommended download. If you get a code-signing certificate later, add a signing step to the `windows` job in `.github/workflows/build.yml` (electron-builder reads `CSC_LINK` / `CSC_KEY_PASSWORD` for a .pfx certificate).
+
+## Regenerating icons
+
+Edit `assets/brand/logo.svg` (app icon) or `assets/brand/glyph.svg` (menu bar icon), then run:
+
+```bash
+pip install playwright pillow && playwright install chromium
+python3 scripts/make-icons.py
+```

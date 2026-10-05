@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PCTV Remote">
+<meta name="application-name" content="PCTV Remote">
+<meta name="theme-color" content="#0d0f13">
+<meta name="format-detection" content="telephone=no">
+<link rel="apple-touch-icon" href="/brand/apple-touch-icon.png">
+<link rel="icon" href="/brand/favicon.ico">
+<link rel="manifest" href="/manifest.webmanifest">
+<title>PCTV Remote</title>
+<link rel="stylesheet" href="/remote/remote.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="status"><img class="brand" src="/brand/logo.svg" alt="PCTV Home"><span id="dot" class="dot"></span><span id="statusText">Connecting…</span></div>
+    <div class="bar-btns">
+      <button class="icon" id="restartBtn" aria-label="Restart launcher">
+        <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+      </button>
+      <button class="icon" id="sysBtn" aria-label="System">
+        <svg viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1011.4 0"/></svg>
+      </button>
+      <button class="icon" id="appsBtn" aria-label="Apps">
+        <svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>
+      </button>
+      <button class="icon" id="kbBtn" aria-label="Keyboard">
+        <svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h1M9.5 10h1M13 10h1M16.5 10h1M7 14h10"/></svg>
+      </button>
+      <button class="icon" id="addBtn" aria-label="Add tile">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="pcstat" id="pcstat">
+    <span class="ps" id="psNet"></span>
+    <span class="ps" id="psBat"></span>
+  </div>
+
+  <div class="seg" role="tablist">
+    <button id="segDpad" class="on">D-pad</button>
+    <button id="segPad">Touchpad</button>
+  </div>
+
+  <main class="stage">
+    <div id="dpadView" class="dpad">
+      <button class="dir up"    data-key="up"    aria-label="Up"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
+      <button class="dir left"  data-key="left"  aria-label="Left"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <button class="ok"        data-key="enter" data-norepeat aria-label="OK">OK</button>
+      <button class="dir right" data-key="right" aria-label="Right"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+      <button class="dir down"  data-key="down"  aria-label="Down"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+    <div id="padView" class="pad" hidden>
+      <span class="pad-hint">Drag to move · tap to click<br>2-finger tap = right click · 2-finger drag = scroll</span>
+    </div>
+  </main>
+
+  <section class="controls">
+    <div class="row3">
+      <button class="round" data-cmd="back" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></svg><span>Back</span></button>
+      <button class="round" data-cmd="home" aria-label="Home"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8a1 1 0 01-1 1h-4v-6h-6v6H5a1 1 0 01-1-1z"/></svg><span>Home</span></button>
+      <button class="round" data-key="playpause" data-norepeat aria-label="Play or pause"><svg viewBox="0 0 24 24"><path d="M5 5l8 7-8 7z"/><path d="M16 6v12M20 6v12"/></svg><span>Play</span></button>
+    </div>
+    <div class="vol">
+      <button data-key="voldown" aria-label="Volume down"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
+      <button data-key="mute" data-norepeat class="mute" aria-label="Mute"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l4 6M21 9l-4 6"/></svg></button>
+      <button data-key="volup" aria-label="Volume up"><svg viewBox="0 0 24 24"><path d="M6 12h12M12 6v12"/></svg></button>
+    </div>
+  </section>
+
+  <!-- keyboard sheet -->
+  <div class="sheet" id="kbSheet" hidden>
+    <div class="sheet-card">
+      <h3 id="kbTitle">Type on TV</h3>
+      <p id="kbLabel" class="kb-label"></p>
+      <input id="kbInput" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Tap here and type…">
+      <p class="kb-note">Letters are sent to the TV as you type.</p>
+      <div class="sheet-row">
+        <button data-key="backspace">⌫</button>
+        <button data-key="tab" data-norepeat>Tab ⇥</button>
+        <button data-key="enter" data-norepeat class="primary">Enter ↵</button>
+      </div>
+      <button class="link" data-close>Done</button>
+    </div>
+  </div>
+
+  <!-- system sheet -->
+  <div class="sheet" id="sysSheet" hidden>
+    <div class="sheet-card">
+      <h3>System</h3>
+      <div class="sys-group">
+        <button class="sys" data-sys="reload"><b>Reload page</b><small>Refresh what's on the TV</small></button>
+        <button class="sys" data-sys="restart-app"><b>Restart launcher</b><small>Apply code updates</small></button>
+        <button class="sys" data-sys="restart-browser"><b>Restart browser</b><small>Close and reopen the kiosk</small></button>
+        <button class="sys" data-sys="exit-kiosk" data-confirm="Close the kiosk browser?"><b>Exit kiosk</b><small>Show the Windows desktop</small></button>
+      </div>
+      <div class="sys-group power">
+        <button class="sys" data-sys="sleep" data-confirm="Put the PC to sleep?"><b>Sleep</b></button>
+        <button class="sys" data-sys="reboot" data-confirm="Restart the PC?"><b>Restart PC</b></button>
+        <button class="sys danger" data-sys="shutdown" data-confirm="Shut down the PC?"><b>Shut down</b></button>
+      </div>
+      <p id="sysMsg" class="msg"></p>
+      <button class="sys cancel" id="sysCancel" data-sys="cancel-power" hidden><b>Cancel restart / shutdown</b></button>
+      <button class="link" data-close>Close</button>
+    </div>
+  </div>
+
+  <!-- apps sheet -->
+  <div class="sheet" id="appsSheet" hidden>
+    <div class="sheet-card">
+      <h3>Open an app</h3>
+      <div class="apps-grid" id="appsGrid"></div>
+      <button class="link" data-close>Close</button>
+    </div>
+  </div>
+
+  <!-- add tile sheet -->
+  <div class="sheet" id="addSheet" hidden>
+    <div class="sheet-card">
+      <h3>Add a tile</h3>
+      <input id="tName" type="text" placeholder="Name (e.g. Spotify)" maxlength="40">
+      <input id="tUrl" type="url" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="https://open.spotify.com">
+      <input id="tIcon" type="url" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="Icon image URL (optional)">
+      <label class="check"><input type="checkbox" id="tTv"> TV mode (smart-TV user agent)</label>
+      <div class="sheet-row">
+        <button id="tSave" class="primary">Add to TV</button>
+      </div>
+      <p id="tMsg" class="msg"></p>
+      <button class="link" data-close>Close</button>
+    </div>
+  </div>
+
+  <div id="noKey" class="nokey" hidden>
+    <img src="/brand/logo-192.png" alt="" style="width:88px;height:88px;border-radius:22px;margin-bottom:12px">
+    <h2>PCTV Remote</h2>
+    <p>Scan the QR code on your PCTV Home screen to pair this phone.</p>
+  </div>
+
+<script src="/remote/remote.js"></script>
+</body>
+</html>

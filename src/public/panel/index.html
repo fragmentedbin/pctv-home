@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PCTV Home</title>
+<link rel="icon" href="/brand/favicon.ico">
+<link rel="stylesheet" href="/panel/panel.css">
+</head>
+<body>
+  <header>
+    <img src="/brand/logo.svg" alt="" class="logo">
+    <div>
+      <h1>PCTV Home</h1>
+      <p class="sub">Your PC, as a smart TV · <span id="version"></span></p>
+    </div>
+  </header>
+
+  <section class="card pair">
+    <img id="qr" alt="Pairing QR code">
+    <div class="pair-text">
+      <h2>Pair your phone</h2>
+      <p>Scan with your phone camera, then tap <b>Add to Home Screen</b> to keep the remote like an app.</p>
+      <code id="url"></code>
+      <div class="row">
+        <button id="copy" class="ghost small">Copy link</button>
+        <button id="newKey" class="ghost small" title="Disconnects paired phones">New pairing code</button>
+      </div>
+      <p class="remotes" id="remotes"></p>
+    </div>
+  </section>
+
+  <section class="actions">
+    <button id="open" class="primary">Open TV Home</button>
+    <button id="restart" class="ghost">Restart</button>
+  </section>
+
+  <section class="card">
+    <h3>Status</h3>
+    <ul class="checks" id="checks"></ul>
+  </section>
+
+  <section class="card">
+    <h3>Settings</h3>
+    <label class="toggle"><input type="checkbox" id="startAtLogin"><span class="sw"></span><span><b>Start with my computer</b><small>Runs quietly in the tray / menu bar</small></span></label>
+    <label class="select"><span><b>Browser for streaming</b><small>Edge plays Netflix in up to 4K on Windows; Chrome is limited to 720p</small></span>
+      <select id="browserPref"><option value="auto">Automatic</option><option value="chrome">Google Chrome</option><option value="edge">Microsoft Edge</option></select></label>
+    <label class="toggle"><input type="checkbox" id="openOnStart"><span class="sw"></span><span><b>Open TV Home when it starts</b><small>Goes straight to the big-screen home</small></span></label>
+  </section>
+
+  <footer>
+    <a href="#" data-url="https://github.com/fragmentedbin/pctv-home">GitHub</a> ·
+    <a href="#" data-url="https://github.com/fragmentedbin/pctv-home/issues">Report a problem</a> ·
+    <span>Free for personal use</span>
+  </footer>
+<script src="/panel/panel.js"></script>
+</body>
+</html>

@@ -1,0 +1,94 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      store:
+        description: Also build the Microsoft Store package (MSIX)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+        env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
+      - run: npm test
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Build installer (.exe)
+        run: npx electron-builder --win nsis --publish never
+      # Microsoft Store package: unsigned on purpose, the Store signs it.
+      # Set repository variables STORE_IDENTITY_NAME and STORE_PUBLISHER (from Partner Center).
+      - name: Build Microsoft Store package (.msix/.appx)
+        if: ${{ inputs.store || (startsWith(github.ref, 'refs/tags/v') && vars.STORE_IDENTITY_NAME != '') }}
+        run: >
+          npx electron-builder --win appx --publish never
+          -c.appx.identityName="${{ vars.STORE_IDENTITY_NAME }}"
+          -c.appx.publisher="${{ vars.STORE_PUBLISHER }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/*.exe
+            dist/*.appx
+            dist/*.msix
+          if-no-files-found: error
+
+  macos:
+    needs: test
+    runs-on: macos-latest
+    env:
+      # Optional: add these secrets to sign + notarize with an Apple Developer ID.
+      CSC_LINK: ${{ secrets.MAC_CERT_P12_BASE64 }}
+      CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Build DMG (Developer ID signed + notarized)
+        if: ${{ env.CSC_LINK != '' }}
+        run: npx electron-builder --mac dmg --publish never -c.mac.notarize=true
+      - name: Build DMG (ad-hoc signed)
+        if: ${{ env.CSC_LINK == '' }}
+        run: npx electron-builder --mac dmg --publish never -c.mac.identity=-
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*.dmg
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts, merge-multiple: true }
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: artifacts/*

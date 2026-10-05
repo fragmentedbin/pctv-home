@@ -1,0 +1,101 @@
+# Packaging for Windows (NSIS installer + Microsoft Store MSIX) and macOS (DMG).
+# Build locally:  npm run dist:win | npm run dist:store | npm run dist:mac
+appId: com.fragmentedbin.pctvhome
+productName: PCTV Home
+copyright: Copyright © 2026 Muhammad Maududy
+artifactName: PCTV-Home-${version}-${os}-${arch}.${ext}
+
+directories:
+  buildResources: build
+  output: dist
+
+files:
+  - package.json
+  - LICENSE
+  - src/**
+  - "!**/*.map"
+  - "!**/{test,tests,__tests__,docs,example,examples}/**"
+  # koffi ships binaries for every OS; keep only the ones a platform needs (see win/mac below)
+  - "!node_modules/koffi/src/**"
+  - "!node_modules/koffi/doc/**"
+  - "!node_modules/koffi/build/koffi/{freebsd,openbsd,linux,musl}_*{,/**}"
+
+# koffi loads a native .node file, which can't live inside the asar archive
+# koffi uses prebuilt N-API binaries, nothing to compile
+npmRebuild: false
+
+asarUnpack:
+  - node_modules/koffi/**
+
+publish:
+  provider: github
+  owner: fragmentedbin
+  repo: pctv-home
+  releaseType: draft
+
+# ---------------- Windows ----------------
+win:
+  icon: build/icon.ico
+  executableName: PCTV Home
+  files:
+    - "!node_modules/koffi/build/koffi/darwin_*{,/**}"
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+
+nsis:
+  oneClick: false
+  perMachine: true                # installs for all users; needed to add the firewall rule
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: PCTV Home
+  license: build/license.txt
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerSidebar: build/installerSidebar.bmp
+  uninstallerSidebar: build/installerSidebar.bmp
+  include: build/installer.nsh    # Windows Firewall rule for the phone remote
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+
+# Microsoft Store package. Fill in the identity values from Partner Center
+# (Product management → Product identity) before submitting.
+appx:
+  applicationId: PCTVHome
+  identityName: REPLACE_WITH_PACKAGE_IDENTITY_NAME
+  publisher: CN=REPLACE_WITH_PUBLISHER_ID
+  publisherDisplayName: Muhammad Maududy
+  displayName: PCTV Home
+  backgroundColor: "#5B5BF6"
+  showNameOnTiles: true
+  addAutoLaunchExtension: true
+  capabilities:
+    - runFullTrust
+    - internetClientServer
+    - privateNetworkClientServer
+
+# ---------------- macOS ----------------
+mac:
+  icon: build/icon.icns
+  category: public.app-category.entertainment
+  files:
+    - "!node_modules/koffi/build/koffi/win32_*{,/**}"
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    LSUIElement: true             # menu-bar app, no Dock icon
+    NSAppleEventsUsageDescription: PCTV Home uses System Events to change the volume and to restart or shut down the Mac from your phone remote.
+    NSLocalNetworkUsageDescription: PCTV Home lets your phone remote connect to this Mac over your local network.
+
+dmg:
+  background: build/dmg-background.png
+  window: { width: 540, height: 380 }
+  contents:
+    - { x: 140, y: 210 }
+    - { x: 400, y: 210, type: link, path: /Applications }

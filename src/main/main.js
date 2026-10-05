@@ -1,0 +1,158 @@
+// PCTV Home desktop app: runs the TV/remote server in the background (tray /
+// menu bar), opens the kiosk browser, and shows a small control panel for pairing.
+const { app, BrowserWindow, Tray, Menu, nativeImage, shell, dialog, systemPreferences } = require('electron');
+const path = require('path');
+const fs = require('fs');
+const { createServer } = require('../server');
+
+const DEV = process.argv.includes('--dev');
+const ICONS = path.join(__dirname, 'icons'); // runtime copies of build/ icons (see scripts/make-icons.py)
+const isStore = process.windowsStore === true; // MSIX / Microsoft Store build
+const PORT = Number(process.env.PORT || 3000);
+
+if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
+app.setAppUserModelId('com.fragmentedbin.pctvhome');
+
+// ---------- settings ----------
+const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
+let settings = { openOnStart: true, firstRun: true, browser: 'auto' };
+function loadSettings() {
+  try { settings = { ...settings, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }; } catch {}
+}
+function saveSettings() {
+  fs.mkdirSync(path.dirname(settingsFile()), { recursive: true });
+  fs.writeFileSync(settingsFile(), JSON.stringify(settings, null, 2));
+}
+
+// Store (MSIX) builds start at login through the package's startup task instead.
+function getStartAtLogin() {
+  if (isStore || !app.isPackaged) return undefined; // dev runs (npm start) never register at login
+  return app.getLoginItemSettings({ args: ['--background'] }).openAtLogin;
+}
+function setStartAtLogin(on) {
+  if (isStore || !app.isPackaged) return;
+  app.setLoginItemSettings({ openAtLogin: !!on, openAsHidden: true, args: ['--background'] });
+}
+
+// ---------- windows ----------
+let panel = null, tray = null, server = null;
+const startedInBackground = process.argv.includes('--background') ||
+  (process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAsHidden);
+
+function showPanel() {
+  if (panel && !panel.isDestroyed()) { panel.show(); panel.focus(); return; }
+  panel = new BrowserWindow({
+    width: 520, height: 760, minWidth: 460, minHeight: 600,
+    title: 'PCTV Home', backgroundColor: '#0f1016', show: false, autoHideMenuBar: true,
+    icon: path.join(ICONS, 'icon.png'),
+    webPreferences: { contextIsolation: true, sandbox: true },
+  });
+  panel.loadURL(`http://localhost:${PORT}/panel`);
+  panel.once('ready-to-show', () => panel.show());
+  panel.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
+  panel.on('close', e => { if (!app.isQuitting) { e.preventDefault(); panel.hide(); } }); // keep running in the tray
+}
+
+function trayImage() {
+  if (process.platform === 'darwin') {
+    const img = nativeImage.createFromPath(path.join(ICONS, 'trayTemplate.png'));
+    img.setTemplateImage(true);
+    return img;
+  }
+  return nativeImage.createFromPath(path.join(ICONS, 'tray.png'));
+}
+
+function buildTray() {
+  tray = new Tray(trayImage());
+  tray.setToolTip('PCTV Home');
+  const menu = () => Menu.buildFromTemplate([
+    { label: 'Open TV Home', click: () => server.openKiosk().catch(e => dialog.showErrorBox('PCTV Home', e.message)) },
+    { label: 'Pair phone / settings…', click: showPanel },
+    { type: 'separator' },
+    ...(getStartAtLogin() === undefined ? [] : [{
+      label: 'Start with my computer', type: 'checkbox', checked: getStartAtLogin(),
+      click: item => setStartAtLogin(item.checked),
+    }]),
+    { label: 'Restart PCTV Home', click: restart },
+    { type: 'separator' },
+    { label: 'Quit PCTV Home', click: () => { app.isQuitting = true; app.quit(); } },
+  ]);
+  tray.setContextMenu(menu());
+  tray.on('right-click', () => tray.setContextMenu(menu()));
+  if (process.platform === 'win32') tray.on('click', showPanel);
+}
+
+function restart() {
+  app.isQuitting = true;
+  try { server?.stop(); } catch {}
+  app.relaunch({ args: process.argv.slice(1).filter(a => a !== '--background').concat('--background') });
+  app.exit(0);
+}
+
+// ---------- macOS permission ----------
+function ensureAccessibility() {
+  if (process.platform !== 'darwin') return;
+  if (!systemPreferences.isTrustedAccessibilityClient(false)) {
+    systemPreferences.isTrustedAccessibilityClient(true); // shows the system prompt once
+  }
+}
+
+// ---------- start ----------
+app.on('second-instance', showPanel);
+app.on('window-all-closed', e => e.preventDefault?.()); // stay in the tray
+app.on('before-quit', () => { app.isQuitting = true; server?.stop(); });
+app.on('activate', showPanel); // macOS dock click
+
+app.whenReady().then(async () => {
+  loadSettings();
+  if (process.platform === 'darwin' && !DEV) app.dock?.hide(); // menu-bar app
+  if (settings.firstRun) setStartAtLogin(true); // installed app: start with the computer by default
+
+  server = createServer({
+    dataDir: path.join(app.getPath('userData'), 'data'),
+    port: PORT,
+    kiosk: settings.openOnStart && !(settings.firstRun && !startedInBackground),
+    browserPreference: settings.browser,
+    watchDir: DEV ? path.join(__dirname, '..') : null,
+    onRestart: restart,
+    app: {
+      getState: () => ({
+        startAtLogin: getStartAtLogin(),
+        openOnStart: settings.openOnStart,
+        browser: settings.browser,
+        store: isStore,
+        packaged: app.isPackaged,
+        accessibility: process.platform === 'darwin' ? systemPreferences.isTrustedAccessibilityClient(false) : null,
+      }),
+      update: async body => {
+        if (typeof body.startAtLogin === 'boolean') setStartAtLogin(body.startAtLogin);
+        if (typeof body.openOnStart === 'boolean') { settings.openOnStart = body.openOnStart; saveSettings(); }
+        if (['auto', 'chrome', 'edge'].includes(body.browser)) {
+          settings.browser = body.browser; saveSettings(); server.setBrowserPreference(body.browser);
+        }
+        if (body.action === 'accessibility') {
+          systemPreferences.isTrustedAccessibilityClient(true);
+          shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility');
+        }
+        if (body.action === 'open-url' && /^https:\/\//.test(body.url || '')) shell.openExternal(body.url);
+        return { ok: true };
+      },
+    },
+  });
+
+  try {
+    await server.start();
+  } catch (e) {
+    dialog.showErrorBox('PCTV Home',
+      e.code === 'EADDRINUSE'
+        ? `Port ${PORT} is already used by another program (or another copy of PCTV Home).`
+        : `PCTV Home could not start:\n${e.message}`);
+    app.exit(1);
+    return;
+  }
+
+  buildTray();
+  ensureAccessibility();
+  if (settings.firstRun || !startedInBackground) showPanel(); // first run: show how to pair
+  if (settings.firstRun) { settings.firstRun = false; saveSettings(); }
+});

@@ -1,0 +1,12 @@
+{
+  "name": "PCTV Remote",
+  "short_name": "PCTV Remote",
+  "description": "Phone remote for PCTV Home",
+  "display": "standalone",
+  "background_color": "#0d0f13",
+  "theme_color": "#0d0f13",
+  "icons": [
+    { "src": "/brand/logo-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/brand/logo-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

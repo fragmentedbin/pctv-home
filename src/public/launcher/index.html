@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en" data-tv-launcher>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PCTV Home</title>
+<link rel="icon" href="/brand/favicon.ico">
+<link rel="stylesheet" href="/launcher/launcher.css">
+</head>
+<body>
+  <!-- Ambient backdrop: cross-fades to the focused app -->
+  <div class="backdrop" aria-hidden="true">
+    <div class="bd" id="bdA"><div class="bd-glow"></div><img class="bd-logo" alt=""></div>
+    <div class="bd" id="bdB"><div class="bd-glow"></div><img class="bd-logo" alt=""></div>
+    <div class="bd-scrim"></div>
+  </div>
+
+  <header class="top">
+    <div class="brand">
+      <img class="brand-mark" src="/brand/logo.svg" alt="">
+      <span><b>PCTV</b> Home</span>
+    </div>
+    <div class="top-right">
+      <button class="chip chip-btn focusable" id="restartBtn" title="Restart launcher">
+        <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+        <span>Restart</span>
+      </button>
+      <div class="chip" id="netChip" hidden></div>
+      <div class="chip" id="batChip" hidden></div>
+      <div class="chip" id="remoteChip" data-state="off">
+        <svg viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg>
+        <span id="remoteChipText">No remote</span>
+      </div>
+      <div class="clock-wrap">
+        <div class="clock" id="clock">--:--</div>
+        <div class="date" id="date"></div>
+      </div>
+    </div>
+  </header>
+
+  <section class="hero" id="hero">
+    <div class="hero-kicker" id="heroKicker">Your apps</div>
+    <h1 class="hero-title" id="heroTitle">Welcome</h1>
+    <div class="hero-meta" id="heroMeta"></div>
+    <div class="hero-cta" id="heroCta"><kbd>OK</kbd><span>to open</span></div>
+  </section>
+
+  <main id="main">
+    <div class="row-head">
+      <h2>Apps</h2>
+      <span class="row-count" id="rowCount"></span>
+    </div>
+    <div class="row" id="tiles"></div>
+  </main>
+
+  <footer class="foot">
+    <div class="legend">
+      <span><kbd>←</kbd><kbd>→</kbd> Navigate</span>
+      <span><kbd>OK</kbd> Open</span>
+      <span><kbd>Esc</kbd> Back</span>
+      <span><kbd>Del</kbd> Remove</span>
+    </div>
+    <aside class="qr-card" id="qrCard">
+      <img id="qr" src="/api/qr.svg" alt="Remote QR code">
+      <div class="qr-text">
+        <strong>Phone remote</strong>
+        <span>Scan with your phone</span>
+        <code id="remoteUrl"></code>
+      </div>
+    </aside>
+  </footer>
+
+  <!-- Launch splash -->
+  <div class="splash" id="splash" hidden>
+    <div class="splash-icon" id="splashIcon"></div>
+    <div class="splash-name" id="splashName"></div>
+    <div class="splash-bar"><i></i></div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- Add tile -->
+  <div class="overlay" id="addDlg" hidden>
+    <div class="dialog">
+      <div class="dlg-head">
+        <h3>Add an app</h3>
+        <p class="muted">Pin any website. You can also add apps from the phone remote.</p>
+      </div>
+      <label class="field">Name<input class="focusable" id="fName" placeholder="Spotify" maxlength="40"></label>
+      <label class="field">Web address<input class="focusable" id="fUrl" placeholder="open.spotify.com" inputmode="url"></label>
+      <div class="field">Tile color<div class="swatches" id="swatches"></div></div>
+      <label class="toggle focusable" id="fTvWrap" tabindex="0">
+        <input type="checkbox" id="fTv" tabindex="-1"><span class="switch"></span>
+        <span><b>TV mode</b><small>Load the site's TV interface (smart-TV user agent)</small></span>
+      </label>
+      <div class="btns">
+        <button class="focusable primary" id="addSave">Add app</button>
+        <button class="focusable ghost" id="addCancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm remove -->
+  <div class="overlay" id="delDlg" hidden>
+    <div class="dialog small">
+      <div class="dlg-head">
+        <h3 id="delTitle">Remove app?</h3>
+        <p class="muted">It will be removed from the home screen. Your sign-in is kept.</p>
+      </div>
+      <div class="btns">
+        <button class="focusable danger" id="delYes">Remove</button>
+        <button class="focusable ghost" id="delNo">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+<script src="/launcher/launcher.js"></script>
+</body>
+</html>

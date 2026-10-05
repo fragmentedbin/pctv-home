@@ -1,0 +1,57 @@
+{
+  "name": "pctv-home",
+  "productName": "PCTV Home",
+  "version": "1.0.0",
+  "description": "Turn any Windows PC or Mac into a smart-TV: a big-screen home screen for your streaming apps, controlled from your phone.",
+  "main": "src/main/main.js",
+  "author": {
+    "name": "Muhammad Maududy",
+    "email": "muhammadmaududy4@gmail.com"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "homepage": "https://github.com/fragmentedbin/pctv-home",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fragmentedbin/pctv-home.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fragmentedbin/pctv-home/issues"
+  },
+  "keywords": [
+    "tv",
+    "launcher",
+    "remote",
+    "kiosk",
+    "htpc",
+    "netflix",
+    "youtube-tv",
+    "electron"
+  ],
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "server": "node src/server/cli.js",
+    "server:kiosk": "node src/server/cli.js --kiosk",
+    "test": "node --test --test-force-exit test/*.test.js",
+    "icons": "node scripts/make-icons.js",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win nsis",
+    "dist:store": "electron-builder --win appx",
+    "dist:mac": "electron-builder --mac dmg -c.mac.identity=-",
+    "dist:linux-dir": "electron-builder --linux dir"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "koffi": "^2.16.3",
+    "qrcode": "^1.5.4",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  }
+}
