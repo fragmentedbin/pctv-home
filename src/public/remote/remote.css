@@ -171,3 +171,5 @@ button.primary { background: linear-gradient(135deg,#8B5CF6,#2563EB); color: #ff
 .sys-screen-list button { flex: 1 0 auto; padding: 10px 12px; border-radius: 12px; background: var(--surface2); font-size: 13px; text-align: left; }
 .sys-screen-list button.on { box-shadow: inset 0 0 0 2px var(--accent); }
 .sys-screen-list small { margin: 2px 0 0; }
+
+.ver { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 6px; }

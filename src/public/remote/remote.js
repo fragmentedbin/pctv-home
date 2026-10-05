@@ -25,6 +25,7 @@
     ws.onmessage = e => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
       if (m.t === 'hello' && !m.input) setStatus(true, 'Connected (dev)');
+      if (m.t === 'hello' && m.version) $('#appVersion').textContent = 'v' + m.version;
       if (m.t === 'focus') onTvFocus(m);
       if (m.t === 'sys-ack') onSysAck(m);
       if (m.t === 'restarting') setStatus(false, 'Restarting…');

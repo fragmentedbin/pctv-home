@@ -1,7 +1,7 @@
 {
   "name": "pctv-home",
   "productName": "PCTV Home",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Turn any Windows PC or Mac into a smart-TV: a big-screen home screen for your streaming apps, controlled from your phone.",
   "main": "src/main/main.js",
   "author": {
