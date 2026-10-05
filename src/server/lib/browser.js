@@ -233,6 +233,7 @@ function launch() {
     '--disable-features=Translate',
     '--overscroll-history-navigation=0',
     '--hide-scrollbars',
+    '--start-fullscreen', // backup for --kiosk
   ];
   // Same physical size on every screen: websites are made for a desk, the TV is far away.
   if (uiScale) args.push(`--force-device-scale-factor=${uiScale}`);
@@ -306,10 +307,25 @@ async function connect() {
     await call('Page.addScriptToEvaluateOnNewDocument', { source: NAV_SCRIPT });
     await call('Runtime.evaluate', { expression: NAV_SCRIPT });
   } catch (e) { console.warn('[browser] focus hook failed:', e.message); }
+  ensureFullscreen(c.targetId);
   if (!defaultUA) {
     try { defaultUA = (await call('Browser.getVersion')).userAgent.replace('HeadlessChrome', 'Chrome'); } catch {}
   }
   return c;
+}
+
+// The kiosk must always cover the whole screen. If Chrome/Edge opened as a normal
+// window (e.g. a copy using the same profile was still running in the background,
+// so --kiosk was ignored), switch the window to full screen ourselves.
+async function ensureFullscreen(targetId) {
+  if (!kioskEnabled) return;
+  try {
+    const { windowId, bounds } = await call('Browser.getWindowForTarget', { targetId });
+    if (bounds.windowState === 'fullscreen') return;
+    console.warn(`[browser] kiosk window was "${bounds.windowState}", switching to full screen`);
+    if (bounds.windowState === 'minimized') await call('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
+    await call('Browser.setWindowBounds', { windowId, bounds: { windowState: 'fullscreen' } });
+  } catch (e) { console.warn('[browser] could not check the window state:', e.message); }
 }
 
 function call(method, params = {}) {
@@ -445,8 +461,9 @@ module.exports = {
   /** Show the kiosk: focus it if it's running, otherwise start it. */
   async launchOrFocus() {
     try {
-      await connect();
+      const c = await connect();
       await call('Page.bringToFront');
+      await ensureFullscreen(c.targetId);
       return true;
     } catch {
       if (!launch()) throw new Error('Chrome or Microsoft Edge is not installed');
@@ -533,6 +550,7 @@ module.exports = {
       await setUA(null);
       await call('Page.navigate', { url: homeUrl });
       await call('Page.bringToFront');
+      ensureFullscreen(conn.targetId);
       return true;
     } catch (e) {
       // Browser closed or crashed: relaunch it in kiosk mode.
