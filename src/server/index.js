@@ -20,7 +20,7 @@ const pkg = require('../../package.json');
 const PUB = path.join(__dirname, '..', 'public');
 
 const DEFAULT_TILES = [
-  { id: 'youtube', name: 'YouTube', url: 'https://www.youtube.com/tv', color: '#1c1c1f', accent: '#ff0033', tv: true, builtin: true },
+  { id: 'youtube', name: 'YouTube', url: 'https://www.youtube.com/tv?env_enableMediaStreams=true', color: '#1c1c1f', accent: '#ff0033', tv: true, builtin: true },
   { id: 'netflix', name: 'Netflix', url: 'https://www.netflix.com/browse', color: '#0b0b0b', accent: '#e50914', builtin: true },
   { id: 'disney', name: 'Disney+', url: 'https://www.disneyplus.com/', color: '#0a1446', accent: '#1f80e0', builtin: true },
   { id: 'vidio', name: 'Vidio', url: 'https://www.vidio.com/', color: '#1d0a0d', accent: '#ee2b3b', builtin: true },
@@ -232,6 +232,10 @@ function createServer(opts) {
           else if (NAV_KEYS.has(m.k)) navKey(m.k);
           break;
         case 'back': doBack(); break;
+        case 'voice': browser.startVoiceSearch().then(
+          ok => ws.send(JSON.stringify({ t: 'voice-ack', ok })),
+          () => ws.send(JSON.stringify({ t: 'voice-ack', ok: false })));
+          break;
         case 'home': doHome(); break;
         case 'move': pointerUsed(); input.move(m.dx, m.dy); break;
         case 'click': pointerUsed(); input.click(m.b); break;

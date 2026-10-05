@@ -279,6 +279,11 @@ async function connect() {
     await call('Runtime.enable');
     await call('Runtime.addBinding', { name: '__tvFocus' });
     await call('Runtime.addBinding', { name: '__tvHover' });
+    // YouTube's voice search uses the PC's microphone; allow it up front, since a
+    // permission bubble can't be answered with the remote. Only YouTube gets it.
+    try {
+      await call('Browser.grantPermissions', { origin: 'https://www.youtube.com', permissions: ['audioCapture'] });
+    } catch (e) { console.warn('[browser] could not pre-allow the microphone:', e.message); }
     if (!defaultUA) {
       try { defaultUA = (await call('Browser.getVersion')).userAgent.replace('HeadlessChrome', 'Chrome'); } catch {}
     }
@@ -419,6 +424,25 @@ module.exports = {
       `!!document.querySelector('yt-keyboard-key, [class*="ytKeyboardKey"]') || /^https:\\/\\/(www\\.)?youtube\\.com\\/tv/.test(location.href)` });
     if (!r.result?.value) return false;
     for (const ev of keyEventsFor(text)) await call('Input.dispatchKeyEvent', ev);
+    return true;
+  },
+
+  /** Start YouTube TV's voice search (PC microphone). Returns false when not on YouTube TV. */
+  async startVoiceSearch() {
+    await connect();
+    const r = await call('Runtime.evaluate', { returnByValue: true, expression: `(() => {
+      if (!/youtube\\.com$/.test(location.hostname) || !location.pathname.startsWith('/tv')) return null;
+      const b = [...document.querySelectorAll('ytlr-search-voice-mic-button')].find(e => e.getBoundingClientRect().width > 0);
+      if (!b) return null;
+      const r = b.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    })()` });
+    const p = r.result?.value;
+    if (!p) return false;
+    // the TV app ignores element.click(); a real (trusted) mouse click starts listening
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await call('Input.dispatchMouseEvent', { type, x: p.x, y: p.y, button: 'left', clickCount: 1 });
+    }
     return true;
   },
 

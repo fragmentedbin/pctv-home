@@ -173,3 +173,6 @@ button.primary { background: linear-gradient(135deg,#8B5CF6,#2563EB); color: #ff
 .sys-screen-list small { margin: 2px 0 0; }
 
 .ver { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 6px; }
+
+.sheet-row button.voice { background: #3b2f6b; }
+.sheet-row button[hidden] { display: none; }

@@ -80,10 +80,11 @@
       <h3 id="kbTitle">Type on TV</h3>
       <p id="kbLabel" class="kb-label"></p>
       <input id="kbInput" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Tap here and type…">
-      <p class="kb-note">Letters are sent to the TV as you type.</p>
+      <p class="kb-note">Letters are sent to the TV as you type. Tip: the 🎤 on your phone's keyboard lets you dictate.</p>
       <div class="sheet-row">
         <button data-key="backspace">⌫</button>
-        <button data-key="tab" data-norepeat>Tab ⇥</button>
+        <button id="voiceBtn" class="voice" hidden>🎤 Voice</button>
+        <button data-key="tab" data-norepeat id="tabBtn">Tab ⇥</button>
         <button data-key="enter" data-norepeat class="primary">Enter ↵</button>
       </div>
       <button class="link" data-close>Done</button>

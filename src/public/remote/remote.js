@@ -28,6 +28,7 @@
       if (m.t === 'hello' && m.version) $('#appVersion').textContent = 'v' + m.version;
       if (m.t === 'focus') onTvFocus(m);
       if (m.t === 'sys-ack') onSysAck(m);
+      if (m.t === 'voice-ack') $('#kbLabel').textContent = m.ok ? 'Listening on the TV… speak now' : 'Voice search works in YouTube';
       if (m.t === 'restarting') setStatus(false, 'Restarting…');
       if (m.t === 'stats') renderStats(m);
       if (m.t === 'reload-ui') location.reload();
@@ -182,7 +183,12 @@
     text:     { title: 'Type on TV', type: 'text', mode: 'text', ac: 'off', ph: 'Tap here and type…' },
   };
   function configureKb(f) {
-    const k = KINDS[classify(f)];
+    const kind = classify(f);
+    const k = KINDS[kind];
+    // YouTube search: offer its voice search (uses the PC's microphone)
+    const yt = !!(f && f.name === 'tv-search');
+    $('#voiceBtn').hidden = !yt;
+    $('#tabBtn').hidden = yt;
     $('#kbTitle').textContent = k.title;
     $('#kbLabel').textContent = f && f.label && f.label.toLowerCase() !== k.title.toLowerCase() ? f.label : '';
     kb.type = k.type;
@@ -228,6 +234,7 @@
     sent = v;
   }
   kb.addEventListener('input', syncText);
+  $('#voiceBtn').addEventListener('click', () => { send({ t: 'voice' }); kb.blur(); });
   kb.addEventListener('compositionstart', () => { composing = true; });
   kb.addEventListener('compositionend', () => { composing = false; syncText(); });
   kb.addEventListener('keydown', e => {
