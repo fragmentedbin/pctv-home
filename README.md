@@ -108,6 +108,11 @@ Give PCTV Home Accessibility access: *System Settings → Privacy & Security →
 Websites are made for a desk, not a couch. **TV size** in the control panel is set to **Auto** by default. It scales the kiosk so pages look the same size on any screen (150% on a 1080p TV, 300% on 4K), and it adjusts automatically when you plug in or unplug a monitor. The kiosk reopens on the home screen when that happens. You can also pick a fixed size (100–300%).
 </details>
 
+<details><summary><b>I have two screens and TV Home is on the wrong one</b></summary>
+
+With two or more displays connected, a **Screen** button appears in the top bar of TV Home (press Up from the apps row). Pick the TV or monitor and TV Home restarts there. The choice is remembered. You can also choose it in the control panel or in the phone remote's ⏻ menu.
+</details>
+
 <details><summary><b>Netflix quality is low</b></summary>
 
 On Windows, Netflix in Chrome is limited to 720p; Edge supports 1080p and 4K. In the control panel, set **Browser for streaming** to **Microsoft Edge**.

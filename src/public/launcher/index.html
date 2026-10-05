@@ -21,6 +21,11 @@
       <span><b>PCTV</b> Home</span>
     </div>
     <div class="top-right">
+      <button class="chip chip-btn focusable" id="screenBtn" title="Choose screen" hidden>
+        <svg viewBox="0 0 24 24"><rect x="2.5" y="4" width="13" height="9" rx="1.5"/><rect x="9.5" y="9" width="12" height="9" rx="1.5"/><path d="M13 21h5"/></svg>
+        <span id="screenBtnText">Screen</span>
+        <svg class="caret" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>
+      </button>
       <button class="chip chip-btn focusable" id="restartBtn" title="Restart launcher">
         <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
         <span>Restart</span>
@@ -98,6 +103,18 @@
         <button class="focusable primary" id="addSave">Add app</button>
         <button class="focusable ghost" id="addCancel">Cancel</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Screen picker -->
+  <div class="overlay" id="screenDlg" hidden>
+    <div class="dialog small">
+      <div class="dlg-head">
+        <h3>Show TV Home on</h3>
+        <p class="muted">TV Home restarts on the screen you pick and remembers it.</p>
+      </div>
+      <div class="screens" id="screenList"></div>
+      <div class="btns"><button class="focusable ghost" id="screenCancel">Cancel</button></div>
     </div>
   </div>
 

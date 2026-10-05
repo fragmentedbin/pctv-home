@@ -15,7 +15,7 @@ app.setAppUserModelId('com.fragmentedbin.pctvhome');
 
 // ---------- settings ----------
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
-let settings = { openOnStart: true, firstRun: true, browser: 'auto', youtubeFill: 'auto', uiScale: 'auto' };
+let settings = { openOnStart: true, firstRun: true, browser: 'auto', youtubeFill: 'auto', uiScale: 'auto', display: 'primary' };
 
 // ---------- TV size (kiosk UI scale) ----------
 // 'auto' sizes websites for viewing from the couch on whatever screen the kiosk is
@@ -23,9 +23,39 @@ let settings = { openOnStart: true, firstRun: true, browser: 'auto', youtubeFill
 // what Windows/macOS scaling each display uses. A number forces a scale, 'system'
 // leaves it to the OS.
 const SCALES = ['auto', 'system', 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+// ---------- which screen the kiosk uses ----------
 function kioskDisplay() {
-  // the kiosk opens on the primary display; with a TV/monitor attached that's usually the one you want
-  return screen.getPrimaryDisplay();
+  const all = screen.getAllDisplays();
+  return all.find(d => String(d.id) === String(settings.display)) || screen.getPrimaryDisplay();
+}
+function listDisplays() {
+  const primary = screen.getPrimaryDisplay().id, current = kioskDisplay().id;
+  return screen.getAllDisplays()
+    .sort((a, b) => (a.bounds.x - b.bounds.x) || (a.bounds.y - b.bounds.y))
+    .map((d, i) => ({
+      id: String(d.id),
+      name: d.label || (d.internal ? 'Built-in display' : `Display ${i + 1}`),
+      width: Math.round(d.size.width * d.scaleFactor),
+      height: Math.round(d.size.height * d.scaleFactor),
+      internal: !!d.internal,
+      primary: d.id === primary,
+      current: d.id === current,
+    }));
+}
+// A point inside the kiosk's display, in Chrome's window coordinates: those are the
+// OS's (Electron's) coordinates, except with a forced scale on Windows, where Chrome
+// divides the physical pixels by that scale.
+function kioskPosition(scale) {
+  const d = kioskDisplay();
+  if (process.platform === 'win32' && scale) {
+    const r = screen.dipToScreenRect(null, d.bounds); // physical pixels
+    return { x: r.x / scale + 40, y: r.y / scale + 40 };
+  }
+  return { x: d.bounds.x + 40, y: d.bounds.y + 40 };
+}
+function placement() {
+  const scale = effectiveScale();
+  return { scale, position: kioskPosition(scale) };
 }
 function autoScale() {
   const d = kioskDisplay();
@@ -42,11 +72,11 @@ let displayTimer = null;
 function watchDisplays() {
   const changed = () => {
     clearTimeout(displayTimer);
-    displayTimer = setTimeout(async () => { // wait until Windows has finished re-arranging the screens
-      if (settings.uiScale !== 'auto') return;
+    displayTimer = setTimeout(async () => { // wait until the OS has finished re-arranging the screens
       try {
-        if (await server.setUiScale(effectiveScale(), { restart: true })) {
-          console.log('[display] screen changed, kiosk restarted at', effectiveScale());
+        // only restarts the kiosk if its screen moved or its auto size changed
+        if (await server.setKioskPlacement(placement(), { restart: true })) {
+          console.log('[display] screens changed, kiosk re-placed', JSON.stringify(placement()));
         }
       } catch (e) { console.error('[display]', e.message); }
     }, 2500);
@@ -154,6 +184,7 @@ app.whenReady().then(async () => {
     browserPreference: settings.browser,
     youtubeFill: settings.youtubeFill,
     uiScale: effectiveScale(),
+    windowPosition: kioskPosition(effectiveScale()),
     watchDir: DEV ? path.join(__dirname, '..') : null,
     onRestart: restart,
     app: {
@@ -169,6 +200,14 @@ app.whenReady().then(async () => {
         packaged: app.isPackaged,
         accessibility: process.platform === 'darwin' ? systemPreferences.isTrustedAccessibilityClient(false) : null,
       }),
+      listDisplays,
+      setDisplay: async id => {
+        const d = screen.getAllDisplays().find(x => String(x.id) === id);
+        if (!d) throw new Error('That screen is not connected');
+        settings.display = d.id === screen.getPrimaryDisplay().id ? 'primary' : String(d.id); saveSettings();
+        const moved = await server.setKioskPlacement(placement(), { restart: true });
+        return { ok: true, moved, display: listDisplays().find(x => x.current) };
+      },
       update: async body => {
         if (typeof body.startAtLogin === 'boolean') setStartAtLogin(body.startAtLogin);
         if (typeof body.openOnStart === 'boolean') { settings.openOnStart = body.openOnStart; saveSettings(); }
@@ -177,7 +216,7 @@ app.whenReady().then(async () => {
         }
         if (body.uiScale !== undefined && SCALES.includes(body.uiScale)) {
           settings.uiScale = body.uiScale; saveSettings();
-          await server.setUiScale(effectiveScale(), { restart: true });
+          await server.setKioskPlacement(placement(), { restart: true });
         }
         if (['auto', 'zoom', 'stretch', 'fit'].includes(body.youtubeFill)) {
           settings.youtubeFill = body.youtubeFill; saveSettings(); await server.setYoutubeFill(body.youtubeFill);

@@ -117,6 +117,15 @@ function createServer(opts) {
     res.json({ ok: true });
   });
 
+  // screens the kiosk can be shown on (desktop app only)
+  app.get('/api/displays', auth, (req, res) => res.json(opts.app?.listDisplays?.() || []));
+  app.post('/api/displays', auth, async (req, res) => {
+    try {
+      if (!opts.app?.setDisplay) throw new Error('Not available');
+      res.json(await opts.app.setDisplay(String(req.body?.id || '')));
+    } catch (e) { res.status(400).json({ error: e.message }); }
+  });
+
   app.get('/api/tiles', auth, (req, res) => res.json(tiles));
   app.post('/api/tiles', auth, (req, res) => {
     let { name, url, color, tv, icon } = req.body || {};
@@ -305,6 +314,7 @@ function createServer(opts) {
           browserPreference: opts.browserPreference,
           youtubeFill: opts.youtubeFill,
           uiScale: opts.uiScale,
+          windowPosition: opts.windowPosition,
         });
         setTimeout(() => input.park(), 4000);
         resolve({ port: PORT, remoteUrl: remoteUrl(), homeUrl: `http://localhost:${PORT}/` });
@@ -323,6 +333,7 @@ function createServer(opts) {
     setBrowserPreference: p => browser.setPreference(p),
     setYoutubeFill: m => browser.setYoutubeFill(m),
     setUiScale: (f, o) => browser.setUiScale(f, o),
+    setKioskPlacement: (p, o) => browser.setPlacement(p, o),
     info: () => ({ remoteUrl: remoteUrl(), homeUrl: `http://localhost:${PORT}/`, port: PORT, remotes: remoteCount() }),
     openKiosk: () => browser.launchOrFocus(),
     closeKiosk: () => browser.closeBrowser(),

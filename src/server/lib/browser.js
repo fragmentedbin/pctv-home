@@ -152,6 +152,8 @@ let preference = 'auto'; // 'auto' | 'chrome' | 'edge'
 let ytMode = 'auto';      // YouTube TV fill: 'auto' | 'zoom' | 'stretch' | 'fit'
 let uiScale = null;       // kiosk zoom (Chrome --force-device-scale-factor); null = use Windows/macOS scaling
 let launchedScale = null; // the scale the running kiosk was started with
+let windowPos = null;      // {x, y}: open the kiosk on the display containing this point
+let launchedPos = null;
 
 /** Locate Chrome or Edge on Windows / macOS / Linux. Returns {path, name} or null. */
 function findBrowser() {
@@ -194,7 +196,10 @@ function launch() {
   ];
   // Same physical size on every screen: websites are made for a desk, the TV is far away.
   if (uiScale) args.push(`--force-device-scale-factor=${uiScale}`);
+  // Kiosk mode goes full screen on the display that contains the window's position.
+  if (windowPos) args.push(`--window-position=${Math.round(windowPos.x)},${Math.round(windowPos.y)}`);
   launchedScale = uiScale;
+  launchedPos = windowPos;
   console.log(`[browser] launching ${b.name} in kiosk mode`);
   spawn(b.path, args, { detached: true, stdio: 'ignore' }).unref();
   return true;
@@ -311,6 +316,20 @@ module.exports = {
   },
   getUiScale: () => ({ wanted: uiScale, running: launchedScale }),
 
+  /**
+   * Choose which screen the kiosk uses, and its scale, in one go (one restart).
+   * @param {{scale?: number|null, position?: {x:number,y:number}|null}} p
+   */
+  async setPlacement(p, { restart = false } = {}) {
+    if ('scale' in p) uiScale = p.scale ? Math.min(4, Math.max(0.5, Number(p.scale))) : null;
+    if ('position' in p) windowPos = p.position || null;
+    const same = uiScale === launchedScale && JSON.stringify(windowPos) === JSON.stringify(launchedPos);
+    if (!restart || same || !conn) return false;
+    console.log(`[browser] kiosk placement -> scale ${uiScale ?? 'system'}, position ${JSON.stringify(windowPos)}; restarting`);
+    await module.exports.restartBrowser();
+    return true;
+  },
+
   async setYoutubeFill(m) {
     ytMode = ['zoom', 'stretch', 'fit'].includes(m) ? m : 'auto';
     if (!conn) return;
@@ -320,8 +339,9 @@ module.exports = {
       await call('Runtime.evaluate', { expression: `window.__pctvSetYtMode && window.__pctvSetYtMode('${ytMode}')` });
     } catch {}
   },
-  init({ home, kiosk, profileDir: dir, browserPath, browserPreference, youtubeFill, uiScale: scale }) {
+  init({ home, kiosk, profileDir: dir, browserPath, browserPreference, youtubeFill, uiScale: scale, windowPosition }) {
     if (scale) uiScale = scale;
+    if (windowPosition) windowPos = windowPosition;
     if (browserPreference) module.exports.setPreference(browserPreference);
     if (youtubeFill) ytMode = youtubeFill;
     homeUrl = home;

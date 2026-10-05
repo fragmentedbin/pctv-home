@@ -18,7 +18,21 @@
     return li;
   }
 
+  async function loadDisplays() {
+    const ds = await fetch('/api/displays').then(r => r.json()).catch(() => []);
+    $('#displayRow').style.display = ds.length > 1 ? '' : 'none';
+    const sel = $('#displayPick');
+    if (document.activeElement === sel) return;
+    sel.replaceChildren(...ds.map(d => {
+      const o = document.createElement('option');
+      o.value = d.id; o.textContent = `${d.name} (${d.width}×${d.height})${d.primary ? ' · main' : ''}`;
+      o.selected = d.current;
+      return o;
+    }));
+  }
+
   async function refresh() {
+    loadDisplays();
     const [info, st] = await Promise.all([fetch('/api/info').then(r => r.json()), fetch('/api/app').then(r => r.json()).catch(() => ({}))]);
     appState = st;
     $('#version').textContent = 'v' + info.version;
@@ -69,6 +83,7 @@
     $('#qr').src = '/api/qr.svg?' + Date.now(); refresh();
   };
   $('#startAtLogin').onchange = e => post('/api/app', { startAtLogin: e.target.checked }).then(refresh);
+  $('#displayPick').onchange = e => post('/api/displays', { id: e.target.value }).then(refresh);
   $('#uiScale').onchange = e => {
     const v = e.target.value;
     post('/api/app', { uiScale: v === 'auto' || v === 'system' ? v : Number(v) }).then(refresh);

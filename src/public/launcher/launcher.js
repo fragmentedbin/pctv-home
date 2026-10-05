@@ -3,6 +3,7 @@
   const row = $('#tiles');
   const addDlg = $('#addDlg');
   const delDlg = $('#delDlg');
+  const screenDlg = $('#screenDlg');
   const DEFAULT_COLOR = '#2b2f3a';
   const COLORS = [DEFAULT_COLOR, '#1db954', '#e50914', '#1f80e0', '#7b2cbf', '#ff6d00', '#00897b', '#c2185b'];
 
@@ -179,7 +180,7 @@
   }
 
   // ---------- focus / spatial navigation ----------
-  const activeLayer = () => (!addDlg.hidden ? addDlg : !delDlg.hidden ? delDlg : $('#main'));
+  const activeLayer = () => (!addDlg.hidden ? addDlg : !delDlg.hidden ? delDlg : !screenDlg.hidden ? screenDlg : $('#main'));
   const layerItems = () => activeLayer() === $('#main')
     ? [...document.querySelectorAll('.top .focusable'), ...$('#main').querySelectorAll('.focusable')]
     : [...activeLayer().querySelectorAll('.focusable')];
@@ -307,10 +308,48 @@
     if (name) toast(`“${name}” removed`);
   }
   function closeDialogs() {
-    addDlg.hidden = true; delDlg.hidden = true;
+    addDlg.hidden = true; delDlg.hidden = true; screenDlg.hidden = true;
     const items = layerItems();
     setFocus(items[Math.min(lastMainFocus, items.length - 1)]);
   }
+
+  // ---------- screen picker (2+ displays) ----------
+  let displays = [];
+  async function loadDisplays() {
+    try { displays = await (await fetch('/api/displays')).json(); } catch { displays = []; }
+    const btn = $('#screenBtn');
+    btn.hidden = displays.length < 2;
+    const cur = displays.find(d => d.current);
+    if (cur) $('#screenBtnText').textContent = cur.name;
+  }
+  function openScreens() {
+    const icon = d => d.internal
+      ? '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></svg>'
+      : '<svg viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M9 21h6M12 17v4"/></svg>';
+    $('#screenList').replaceChildren(...displays.map(d => {
+      const b = document.createElement('button');
+      b.className = 'screen-opt focusable';
+      b.innerHTML = `${icon(d)}<span><b></b><small>${d.width} × ${d.height}${d.primary ? ' · main display' : ''}</small></span>${d.current ? '<span class="tag">Now</span>' : ''}`;
+      b.querySelector('b').textContent = d.name;
+      b.addEventListener('click', () => moveTo(d));
+      return b;
+    }));
+    screenDlg.hidden = false;
+    const items = [...screenDlg.querySelectorAll('.screen-opt')];
+    setFocus(items.find((_, i) => displays[i].current) || items[0]);
+  }
+  async function moveTo(d) {
+    closeDialogs();
+    if (d.current) return;
+    toast(`Moving TV Home to ${d.name}…`);
+    try {
+      const r = await (await fetch('/api/displays', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: d.id }) })).json();
+      if (r.error) toast(r.error);
+    } catch {}
+  }
+  $('#screenBtn').addEventListener('click', openScreens);
+  $('#screenCancel').addEventListener('click', closeDialogs);
+  loadDisplays(); setInterval(loadDisplays, 5000);
 
   $('#restartBtn').addEventListener('click', async () => {
     toast('Restarting launcher…');

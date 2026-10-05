@@ -317,7 +317,29 @@
     if (m.ok && (m.a === 'reboot' || m.a === 'shutdown')) $('#sysCancel').hidden = false;
     if (m.a === 'cancel-power') $('#sysCancel').hidden = true;
   }
+  async function loadScreens() {
+    try {
+      const ds = await (await fetch(`/api/displays?k=${encodeURIComponent(key)}`)).json();
+      $('#sysScreens').hidden = !(ds.length > 1);
+      $('#sysScreenList').replaceChildren(...ds.map(d => {
+        const b = document.createElement('button');
+        b.className = d.current ? 'on' : '';
+        b.innerHTML = '<b></b><small></small>';
+        b.querySelector('b').textContent = d.name;
+        b.querySelector('small').textContent = `${d.width}×${d.height}`;
+        b.addEventListener('click', async () => {
+          if (d.current) return;
+          $('#sysMsg').textContent = `Moving TV Home to ${d.name}…`;
+          await fetch('/api/displays', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Remote-Key': key }, body: JSON.stringify({ id: d.id }) });
+          setTimeout(loadScreens, 1500);
+        });
+        return b;
+      }));
+    } catch {}
+  }
+
   $('#sysBtn').addEventListener('click', () => {
+    loadScreens();
     document.querySelectorAll('.sheet').forEach(s => (s.hidden = true));
     $('#sysMsg').textContent = '';
     $('#sysSheet').hidden = false;

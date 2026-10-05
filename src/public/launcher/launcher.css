@@ -255,3 +255,18 @@ html.idle, html.idle * { cursor: none !important; }
 .bat-ico .lvl { fill: currentColor; stroke: none; }
 .bat-low { color: #f28b82; }
 .bat-chg { color: #81c995; }
+
+/* screen picker */
+.chip-btn[hidden] { display: none; }
+.chip-btn .caret { width: 16px; height: 16px; margin-left: -2px; opacity: .7; }
+.screens { display: flex; flex-direction: column; gap: 10px; }
+.screen-opt {
+  display: flex; align-items: center; gap: 16px; text-align: left; padding: 16px 18px; border-radius: 14px;
+  background: var(--surface-2); font-weight: 500;
+}
+.screen-opt svg { width: 34px; height: 34px; flex: 0 0 auto; color: var(--text-2); }
+.screen-opt b { display: block; font-size: 1.1rem; }
+.screen-opt small { color: var(--text-3); font-size: .9rem; font-weight: 400; }
+.screen-opt .tag { margin-left: auto; font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  padding: .3em .7em; border-radius: 6px; background: rgba(155,140,255,.18); color: #c9c1ff; }
+.screen-opt.focused { transform: scale(1.03); box-shadow: 0 0 0 3px #fff; background: rgba(255,255,255,.12); }
