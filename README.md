@@ -31,6 +31,7 @@ A laptop or mini-PC plugged into a TV is a great media player, until you have to
 - **YouTube's TV interface** (youtube.com/tv) in full screen
 - **Add any website** as a tile, from the TV or from your phone
 - **PC status on both screens**: battery, Wi-Fi name, signal, and ping
+- **Incognito mode** for guests: one press restarts the TV browser with an empty profile (no logins, history or cookies). Turning it off brings your accounts back and deletes everything from the session
 - **Power controls**: reload the page, restart, sleep, restart or shut down the PC from your phone
 - **Runs quietly in the tray or menu bar**, starts with your computer, and works without an internet account
 
@@ -86,7 +87,7 @@ The first time you open each service, sign in on the TV. Your logins are kept.
 | Touchpad | Drag = move, tap = click, two-finger tap = right-click, two-finger drag = scroll |
 | ⌨ | Type on the TV (pops up automatically on text fields) |
 | ▦ | Open an app straight from the phone |
-| ↻ · ⏻ | Restart PCTV Home · power menu (sleep, restart, shut down) |
+| ↻ · ⏻ | Restart PCTV Home · system menu (incognito, sleep, restart, shut down) |
 
 ## Troubleshooting
 

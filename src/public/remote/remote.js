@@ -27,6 +27,8 @@
       if (m.t === 'hello' && !m.input) setStatus(true, 'Connected (dev)');
       if (m.t === 'hello' && m.version) $('#appVersion').textContent = 'v' + m.version;
       if (m.t === 'focus') onTvFocus(m);
+      if (m.t === 'hello') setIncognito(m.incognito);
+      if (m.t === 'incognito') setIncognito(m.on);
       if (m.t === 'sys-ack') onSysAck(m);
       if (m.t === 'voice-ack') $('#kbLabel').textContent = m.ok ? 'Listening on the TV… speak now' : 'Voice search works in YouTube';
       if (m.t === 'restarting') setStatus(false, 'Restarting…');
@@ -319,6 +321,13 @@
     $('#sysMsg').textContent = 'Working…';
     send({ t: 'sys', a });
   }));
+  function setIncognito(on) {
+    $('#incogSys').classList.toggle('on', !!on);
+    $('#incogSysTitle').textContent = on ? 'Exit incognito' : 'Incognito mode';
+    $('#incogSysSub').textContent = on ? 'Incognito is on. Leaving deletes everything from this session'
+      : 'Private session on the TV. No logins or history are kept';
+    document.body.classList.toggle('incognito', !!on);
+  }
   function onSysAck(m) {
     if (m.a === 'restart-app' && !m.ok) { $('#restartBtn').classList.remove('spin'); setStatus(true, m.msg); }
     $('#sysMsg').textContent = m.ok ? m.msg : 'Failed: ' + m.msg;

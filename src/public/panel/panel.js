@@ -36,6 +36,9 @@
     const [info, st] = await Promise.all([fetch('/api/info').then(r => r.json()), fetch('/api/app').then(r => r.json()).catch(() => ({}))]);
     appState = st;
     $('#version').textContent = 'v' + info.version;
+    incogOn = !!info.incognito;
+    $('#incog').textContent = incogOn ? 'Exit incognito' : 'Incognito';
+    $('#incog').classList.toggle('on', incogOn);
     $('#url').textContent = info.remoteUrl.replace(/\?k=.*/, '');
     $('#remotes').textContent = info.remotes ? `${info.remotes} phone${info.remotes > 1 ? 's' : ''} connected` : 'No phone connected yet';
     $('#remotes').classList.toggle('on', info.remotes > 0);
@@ -72,6 +75,11 @@
   $('#qr').src = '/api/qr.svg?' + Date.now();
   $('#open').onclick = () => post('/api/sys', { a: 'open-kiosk' }).then(r => { if (!r.ok) alert(r.msg); });
   $('#restart').onclick = () => { $('#restart').textContent = 'Restarting…'; post('/api/sys', { a: 'restart-app' }); };
+  let incogOn = false;
+  $('#incog').onclick = () => {
+    $('#incog').textContent = incogOn ? 'Leaving…' : 'Starting…';
+    post('/api/sys', { a: incogOn ? 'incognito-off' : 'incognito-on' }).then(r => { if (!r.ok) alert(r.msg); refresh(); });
+  };
   $('#copy').onclick = async () => {
     const info = await fetch('/api/info').then(r => r.json());
     await navigator.clipboard.writeText(info.remoteUrl).catch(() => {});

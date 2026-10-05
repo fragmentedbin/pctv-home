@@ -15,7 +15,8 @@ code { display:block; color:#b4a9ff; font:12px/1.3 ui-monospace,Consolas,monospa
 .row { display:flex; gap:8px; }
 .remotes { margin-top:8px !important; }
 .remotes.on { color:var(--ok) !important; }
-.actions { display:grid; grid-template-columns:2fr 1fr; gap:10px; margin-bottom:12px; }
+.actions { display:grid; grid-template-columns:2fr 1fr 1fr; gap:10px; margin-bottom:12px; }
+.actions .on { background:#3c4043; color:#fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.3); }
 button { font:inherit; font-weight:600; border:0; border-radius:12px; padding:12px 16px; color:var(--text); background:#262935; cursor:pointer; }
 button:hover { filter:brightness(1.12); }
 button.primary { background:linear-gradient(135deg,#8B5CF6,#2563EB); color:#fff; font-size:15px; }

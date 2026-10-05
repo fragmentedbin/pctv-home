@@ -359,6 +359,21 @@
     } catch {}
   });
 
+  // ---------- incognito ----------
+  function setIncognito(on) {
+    document.body.classList.toggle('incognito', !!on);
+    $('#incogBadge').hidden = !on;
+    $('#incogBtn').dataset.state = on ? 'on' : 'off';
+    $('#incogText').textContent = on ? 'Exit incognito' : 'Incognito';
+  }
+  $('#incogBtn').addEventListener('click', async () => {
+    const on = $('#incogBtn').dataset.state !== 'on';
+    toast(on ? 'Starting incognito… nothing will be saved' : 'Leaving incognito…');
+    try { // the browser restarts, so this page usually goes away before the reply
+      await fetch('/api/sys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ a: on ? 'incognito-on' : 'incognito-off' }) });
+    } catch {}
+  });
+
   // ---------- PC status: Wi-Fi + battery ----------
   const pingClass = ms => ms == null ? 'bad' : ms < 40 ? 'good' : ms < 100 ? 'ok' : 'bad';
   function wifiIcon(signal) {
@@ -438,6 +453,8 @@
       if (m.t === 'restarting') toast('Restarting launcher…');
       if (m.t === 'stats') renderStats(m);
       if (m.t === 'reload-ui') location.reload();
+      if (m.t === 'incognito') setIncognito(m.on);
+      if (m.t === 'hello') setIncognito(m.incognito);
       if (m.t === 'hello') { // server restarted with new code -> pick up the new UI
         if (bootId && bootId !== m.boot) location.reload();
         bootId = m.boot;

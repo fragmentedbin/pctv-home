@@ -99,7 +99,7 @@ function createServer(opts) {
   app.get('/api/info', localOnly, (req, res) => res.json({
     name: pkg.productName, version: pkg.version, remoteUrl: remoteUrl(), ip: lanIp(), port: PORT,
     platform: process.platform, browser: browser.findBrowser(), devtools: browser.connected(),
-    input: input.status(), remotes: remoteCount(),
+    input: input.status(), remotes: remoteCount(), incognito: browser.isIncognito(),
   }));
   app.get('/api/qr.svg', localOnly, async (req, res) => {
     const svg = await QRCode.toString(remoteUrl(), { type: 'svg', margin: 1, color: { dark: '#000000', light: '#ffffff' } });
@@ -219,7 +219,7 @@ function createServer(opts) {
       ws.close(4001, 'bad key'); return;
     }
     ws.isRemote = !isLocal(req.socket.remoteAddress);
-    ws.send(JSON.stringify({ t: 'hello', input: input.status(), boot: BOOT_ID, name: pkg.productName, version: pkg.version }));
+    ws.send(JSON.stringify({ t: 'hello', input: input.status(), boot: BOOT_ID, name: pkg.productName, version: pkg.version, incognito: browser.isIncognito() }));
     broadcastRemotes();
     ws.on('close', broadcastRemotes);
     ws.send(JSON.stringify({ t: 'focus', ...browser.focusState() }));
@@ -257,6 +257,7 @@ function createServer(opts) {
 
   stats.events.on('update', st => broadcast({ t: 'stats', ...st }));
   browser.events.on('focus', info => broadcast({ t: 'focus', ...info }));
+  browser.events.on('incognito', on => broadcast({ t: 'incognito', on }));
 
   // ---------- system actions ----------
   let powerTimer = null;
@@ -277,6 +278,9 @@ function createServer(opts) {
       case 'restart-app': restartApp('requested'); return 'Restarting PCTV Home';
       case 'restart-browser': await browser.restartBrowser(); return 'Browser restarted';
       case 'open-kiosk': await browser.launchOrFocus(); return 'TV Home opened';
+      case 'incognito-on': await browser.setIncognito(true); return 'Incognito on: nothing is saved';
+      case 'incognito-off': await browser.setIncognito(false); return 'Incognito off: your accounts are back';
+      case 'incognito-toggle': return system(browser.isIncognito() ? 'incognito-off' : 'incognito-on');
       case 'exit-kiosk': await browser.closeBrowser(); return 'Kiosk closed';
       case 'sleep': setTimeout(() => power.sleep().catch(e => console.error('[power]', e.message)), 800); return 'Going to sleep';
       case 'reboot': return delayedPower(power.reboot, 'Restarting PC');

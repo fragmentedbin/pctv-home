@@ -182,6 +182,16 @@ let uiScale = null;       // kiosk zoom (Chrome --force-device-scale-factor); nu
 let launchedScale = null; // the scale the running kiosk was started with
 let windowPos = null;      // {x, y}: open the kiosk on the display containing this point
 let launchedPos = null;
+let incognito = false;     // private session: a throwaway profile, wiped when it ends
+
+// Incognito uses its own empty profile folder. It is wiped before every incognito
+// launch and when incognito is turned off, so nothing from it is ever kept.
+const incognitoDir = () => `${profileDir}-incognito`;
+const incognitoMarker = () => `${profileDir}-incognito.on`; // survives a launcher restart while the kiosk stays open
+function wipeIncognito() {
+  try { fs.rmSync(incognitoDir(), { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); }
+  catch (e) { console.warn('[browser] could not clear the incognito profile:', e.message); }
+}
 
 /** Locate Chrome or Edge on Windows / macOS / Linux. Returns {path, name} or null. */
 function findBrowser() {
@@ -211,9 +221,11 @@ function findBrowser() {
 function launch() {
   const b = findBrowser();
   if (!b) { console.error('[browser] Chrome/Edge not found.'); return false; }
+  if (incognito) wipeIncognito(); // every incognito launch starts empty
   const args = [
     '--kiosk', homeUrl,
-    `--user-data-dir=${profileDir}-${/edge/i.test(b.name) ? 'edge' : 'chrome'}`, // separate profile per browser
+    // separate profile per browser; incognito gets a throwaway one
+    `--user-data-dir=${incognito ? incognitoDir() : `${profileDir}-${/edge/i.test(b.name) ? 'edge' : 'chrome'}`}`,
     `--remote-debugging-port=${CDP_PORT}`,
     '--no-first-run', '--no-default-browser-check',
     '--autoplay-policy=no-user-gesture-required',
@@ -228,7 +240,8 @@ function launch() {
   if (windowPos) args.push(`--window-position=${Math.round(windowPos.x)},${Math.round(windowPos.y)}`);
   launchedScale = uiScale;
   launchedPos = windowPos;
-  console.log(`[browser] launching ${b.name} in kiosk mode`);
+  if (incognito) args.push('--disable-sync', '--no-pings');
+  console.log(`[browser] launching ${b.name} in kiosk mode${incognito ? ' (incognito)' : ''}`);
   spawn(b.path, args, { detached: true, stdio: 'ignore' }).unref();
   return true;
 }
@@ -364,6 +377,26 @@ module.exports = {
     return true;
   },
 
+  /** Incognito: restart the kiosk with an empty throwaway profile (or back to the normal one). */
+  isIncognito: () => incognito,
+  async setIncognito(on) {
+    on = !!on;
+    if (on === incognito) return false;
+    incognito = on;
+    try { on ? fs.writeFileSync(incognitoMarker(), '') : fs.rmSync(incognitoMarker(), { force: true }); } catch {}
+    console.log(`[browser] incognito ${on ? 'on' : 'off'}, restarting the kiosk`);
+    events.emit('incognito', on);
+    await module.exports.closeBrowser();
+    await new Promise(r => setTimeout(r, 2000));
+    if (!on) wipeIncognito();
+    if (!launch()) {
+      incognito = false; try { fs.rmSync(incognitoMarker(), { force: true }); } catch {}
+      events.emit('incognito', false);
+      throw new Error('Chrome or Microsoft Edge is not installed');
+    }
+    return true;
+  },
+
   async setYoutubeFill(m) {
     ytMode = ['zoom', 'stretch', 'fit'].includes(m) ? m : 'auto';
     if (!conn) return;
@@ -382,8 +415,16 @@ module.exports = {
     kioskEnabled = true; // Home/relaunch may (re)open the kiosk
     profileDir = dir;
     forcedBrowser = browserPath || null;
-    // after a launcher restart the kiosk is usually still open: reuse it
-    if (kiosk) listPages().then(() => console.log('[browser] kiosk already running, reusing it')).catch(() => launch());
+    // after a launcher restart the kiosk is usually still open: reuse it (and stay
+    // incognito if it was). If it isn't running, an old incognito session is over.
+    const wasIncognito = fs.existsSync(incognitoMarker());
+    listPages().then(() => {
+      incognito = wasIncognito;
+      console.log(`[browser] kiosk already running, reusing it${incognito ? ' (incognito)' : ''}`);
+    }).catch(() => {
+      if (wasIncognito) { try { fs.rmSync(incognitoMarker(), { force: true }); } catch {} wipeIncognito(); }
+      if (kiosk) launch();
+    });
     // keep a DevTools connection open so focus events arrive without any command first
     let warned = false;
     setInterval(() => {

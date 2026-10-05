@@ -270,3 +270,13 @@ html.idle, html.idle * { cursor: none !important; }
 .screen-opt .tag { margin-left: auto; font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
   padding: .3em .7em; border-radius: 6px; background: rgba(155,140,255,.18); color: #c9c1ff; }
 .screen-opt.focused { transform: scale(1.03); box-shadow: 0 0 0 3px #fff; background: rgba(255,255,255,.12); }
+
+/* ---------- incognito ---------- */
+.incog-badge { display: inline-flex; align-items: center; gap: 8px; margin-left: 14px; padding: 6px 14px 6px 10px; border-radius: 999px;
+  font-size: .85rem; font-weight: 500; color: #e8eaed; background: rgba(154,160,166,.16); border: 1px solid rgba(255,255,255,.14); }
+.incog-badge, .chip-btn { white-space: nowrap; }
+.incog-badge svg, #incogBtn svg { flex-shrink: 0; }
+.incog-badge[hidden] { display: none; }
+.incog-badge svg, #incogBtn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#incogBtn[data-state="on"] { color: #e8eaed; background: rgba(154,160,166,.22); }
+body.incognito .backdrop { filter: grayscale(.85) brightness(.75); }
