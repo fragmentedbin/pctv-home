@@ -7,6 +7,7 @@ const path = require('path');
 const WebSocket = require('ws');
 const { EventEmitter } = require('events');
 const NAV_SCRIPT = require('./tv-nav');
+const { keyEventsFor } = require('./keys');
 const ytTvScript = require('./yt-tv');
 const APP_VERSION = require('../../../package.json').version;
 
@@ -22,7 +23,7 @@ const FOCUS_SCRIPT = `(() => {
     if (el && /^I?FRAME$/.test(el.tagName)) return; // the child frame reports for itself
     const editable = !!el && !el.disabled && !el.readOnly && (el.isContentEditable || el.tagName === 'TEXTAREA' ||
       (el.tagName === 'INPUT' && !NON_TEXT.test(el.type)));
-    const info = !editable ? { editable: false } : {
+    let info = !editable ? { editable: false } : {
       editable: true,
       type: (el.type || 'text').toLowerCase(),
       inputmode: (el.inputMode || el.getAttribute('inputmode') || '').toLowerCase(),
@@ -31,9 +32,36 @@ const FOCUS_SCRIPT = `(() => {
       label: el.getAttribute('aria-label') || el.placeholder || (el.labels && el.labels[0] && el.labels[0].innerText) || '',
       maxlength: el.maxLength > 0 ? el.maxLength : 0,
     };
+    // pages with their own on-screen keyboard (YouTube TV) describe a "virtual" field
+    if (!editable && typeof window.__pctvVirtualField === 'function') {
+      const v = window.__pctvVirtualField();
+      if (v) info = Object.assign({ editable: true, inputmode: '', autocomplete: '', maxlength: 0 }, v);
+    }
     try { window.__tvFocus(JSON.stringify(info)); } catch (e) {}
   };
   let t; const schedule = () => { clearTimeout(t); t = setTimeout(report, 50); };
+  window.__pctvReport = schedule;
+
+  // TV-style pages (YouTube TV, Google's TV sign-in) have no real text field, only their
+  // own on-screen keyboard. Describe it as a "virtual" field so the phone keyboard pops up.
+  if (window.top === window) {
+    window.__pctvVirtualField = () => {
+      const key = document.querySelector('yt-keyboard-key, [class*="ytKeyboardKey"]');
+      if (!key) return null;
+      const r = key.getBoundingClientRect();
+      if (!r.width || !r.height) return null;
+      const txt = document.body ? document.body.innerText : '';
+      const signIn = location.hostname === 'accounts.google.com' || txt.includes('@gmail.com');
+      return signIn
+        ? { type: 'email', name: 'tv-signin', label: 'Google sign-in' }
+        : { type: 'search', name: 'tv-search', label: 'Search YouTube' };
+    };
+    let lastVirtual = '';
+    setInterval(() => {
+      const v = JSON.stringify(window.__pctvVirtualField());
+      if (v !== lastVirtual) { lastVirtual = v; schedule(); }
+    }, 400);
+  }
   addEventListener('focusin', schedule, true);
   addEventListener('focusout', schedule, true);
   if (document.readyState === 'loading') addEventListener('DOMContentLoaded', schedule); else schedule();
@@ -239,6 +267,7 @@ async function connect() {
         call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: +x, y: +y, button: 'none' }).catch(() => {});
       } catch {}
     } else if (msg.method === 'Page.frameNavigated' && !msg.params.frame.parentId) {
+      c.url = msg.params.frame.url;
       onFocusReport({ editable: false }); // new page in the main frame
     }
   });
@@ -377,6 +406,20 @@ module.exports = {
       if (!launch()) throw new Error('Chrome or Microsoft Edge is not installed');
       return true;
     }
+  },
+
+  /**
+   * Type text into the kiosk page. YouTube's TV app only accepts real key presses,
+   * so there we send DevTools key events; elsewhere returns false and the caller
+   * uses OS-level input (works in every normal text field).
+   */
+  async typeText(text) {
+    await connect();
+    const r = await call('Runtime.evaluate', { returnByValue: true, expression:
+      `!!document.querySelector('yt-keyboard-key, [class*="ytKeyboardKey"]') || /^https:\\/\\/(www\\.)?youtube\\.com\\/tv/.test(location.href)` });
+    if (!r.result?.value) return false;
+    for (const ev of keyEventsFor(text)) await call('Input.dispatchKeyEvent', ev);
+    return true;
   },
 
   /** Play/pause the biggest video on the page. Returns false if there is none. */

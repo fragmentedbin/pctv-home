@@ -236,7 +236,11 @@ function createServer(opts) {
         case 'move': pointerUsed(); input.move(m.dx, m.dy); break;
         case 'click': pointerUsed(); input.click(m.b); break;
         case 'wheel': pointerUsed(); input.wheel(m.d); break;
-        case 'text': input.text(m.s); break;
+        case 'text': {
+          const str = String(m.s || '').slice(0, 500);
+          browser.typeText(str).then(ok => { if (!ok) input.text(str); }, () => input.text(str));
+          break;
+        }
         case 'bs': for (let i = 0; i < Math.min(Number(m.n) || 0, 200); i++) input.key('backspace'); break;
         case 'ping': ws.send('{"t":"pong"}'); break;
         case 'sys': system(m.a).then(
