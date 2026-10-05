@@ -243,13 +243,68 @@ function applySecureDns(dir) {
   catch (e) { console.warn('[browser] could not set secure DNS:', e.message); }
 }
 
+// The kiosk never needs yesterday's tabs. Edge in particular brings back every
+// tab of the last session after an unclean exit (and keeps running in the
+// background), so each start used to add more pages and more memory. Before a
+// start we drop the saved session and switch both behaviours off.
+function readJson(f) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } }
+function writeJson(f, v) {
+  try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(v)); }
+  catch (e) { console.warn(`[browser] could not update ${path.basename(f)}:`, e.message); }
+}
+function prepareProfile(dir) {
+  applySecureDns(dir);
+  const lsFile = path.join(dir, 'Local State');
+  const ls = readJson(lsFile) || {};
+  if (ls.background_mode?.enabled !== false) { ls.background_mode = { ...(ls.background_mode || {}), enabled: false }; writeJson(lsFile, ls); }
+  const prefFile = path.join(dir, 'Default', 'Preferences');
+  const pref = readJson(prefFile);
+  if (pref) {
+    pref.profile = { ...(pref.profile || {}), exit_type: 'Normal', exited_cleanly: true };
+    pref.session = { ...(pref.session || {}), restore_on_startup: 5 }; // 5 = open the start page only
+    writeJson(prefFile, pref);
+  }
+  // the saved tab list (not cookies or logins)
+  try { fs.rmSync(path.join(dir, 'Default', 'Sessions'), { recursive: true, force: true }); } catch {}
+}
+
+/** Is a kiosk browser already answering on the DevTools port? */
+async function cdpAlive(timeout = 1500) {
+  try { await fetch(`${CDP}/json/version`, { signal: AbortSignal.timeout(timeout) }); return true; } catch { return false; }
+}
+/** Wait for the old browser to be gone (after Browser.close), up to `ms`. */
+async function waitClosed(ms = 10000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (!(await cdpAlive(800))) { await new Promise(r => setTimeout(r, 700)); return true; }
+    await new Promise(r => setTimeout(r, 400));
+  }
+  return false;
+}
+
+// One start at a time, and never a second copy: starting the browser again while
+// it runs just opens another window (not in kiosk mode) inside the running one.
+let launching = null;
 function launch() {
+  if (!launching) {
+    launching = (async () => {
+      if (await cdpAlive()) {
+        console.log('[browser] kiosk browser is already running, not starting another one');
+        return true;
+      }
+      return spawnBrowser();
+    })().finally(() => setTimeout(() => { launching = null; }, 3000));
+  }
+  return launching;
+}
+
+function spawnBrowser() {
   const b = findBrowser();
   if (!b) { console.error('[browser] Chrome/Edge not found.'); return false; }
   if (incognito) wipeIncognito(); // every incognito launch starts empty
   // separate profile per browser; incognito gets a throwaway one
   const dataDir = incognito ? incognitoDir() : `${profileDir}-${/edge/i.test(b.name) ? 'edge' : 'chrome'}`;
-  applySecureDns(dataDir);
+  prepareProfile(dataDir);
   const args = [
     '--kiosk', homeUrl,
     `--user-data-dir=${dataDir}`,
@@ -257,6 +312,7 @@ function launch() {
     '--no-first-run', '--no-default-browser-check',
     '--autoplay-policy=no-user-gesture-required',
     '--disable-session-crashed-bubble', '--hide-crash-restore-bubble',
+    '--disable-background-mode',
     '--disable-features=Translate',
     '--overscroll-history-navigation=0',
     '--hide-scrollbars',
@@ -335,6 +391,7 @@ async function connect() {
     await call('Runtime.evaluate', { expression: NAV_SCRIPT });
   } catch (e) { console.warn('[browser] focus hook failed:', e.message); }
   ensureFullscreen(c.targetId, 'connected');
+  closeExtraPages().catch(() => {}); // leftovers from an earlier run
   // Edge on Windows can restore its old window size a moment after starting: check again
   setTimeout(() => conn === c && ensureFullscreen(c.targetId, 'after 4 s'), 4000);
   if (!defaultUA) {
@@ -383,12 +440,15 @@ async function setUA(ua) {
 }
 
 async function closeExtraPages() {
-  const pages = await listPages();
-  for (const p of pages) {
-    if (conn && p.id !== conn.targetId) {
-      try { await fetch(`${CDP}/json/close/${p.id}`, { signal: AbortSignal.timeout(1000) }); } catch {}
-    }
+  if (!conn) return 0;
+  let n = 0;
+  for (const p of await listPages()) {
+    if (p.id === conn.targetId) continue;
+    try { await call('Target.closeTarget', { targetId: p.id }); n++; }
+    catch { try { await fetch(`${CDP}/json/close/${p.id}`, { signal: AbortSignal.timeout(1000) }); n++; } catch {} }
   }
+  if (n) console.log(`[browser] closed ${n} extra page${n > 1 ? 's' : ''}`);
+  return n;
 }
 
 module.exports = {
@@ -446,9 +506,9 @@ module.exports = {
     console.log(`[browser] incognito ${on ? 'on' : 'off'}, restarting the kiosk`);
     events.emit('incognito', on);
     await module.exports.closeBrowser();
-    await new Promise(r => setTimeout(r, 2000));
+    await waitClosed();
     if (!on) wipeIncognito();
-    if (!launch()) {
+    if (!(await launch())) {
       incognito = false; try { fs.rmSync(incognitoMarker(), { force: true }); } catch {}
       events.emit('incognito', false);
       throw new Error('Chrome or Microsoft Edge is not installed');
@@ -510,7 +570,7 @@ module.exports = {
       await ensureFullscreen(c.targetId);
       return true;
     } catch {
-      if (!launch()) throw new Error('Chrome or Microsoft Edge is not installed');
+      if (!(await launch())) throw new Error('Chrome or Microsoft Edge is not installed');
       return true;
     }
   },
@@ -575,13 +635,14 @@ module.exports = {
   /** Close and reopen the kiosk browser. */
   async restartBrowser() {
     await module.exports.closeBrowser();
-    await new Promise(r => setTimeout(r, 2000));
-    if (!launch()) throw new Error('Chrome or Microsoft Edge is not installed');
+    if (!(await waitClosed())) console.warn('[browser] old browser still running after 10 s');
+    if (!(await launch())) throw new Error('Chrome or Microsoft Edge is not installed');
   },
 
   /** Open a tile URL in the kiosk tab. tvMode = use TV user agent. */
   async open(url, tvMode) {
     await connect();
+    await closeExtraPages().catch(() => {}); // pop-ups/tabs from the previous app
     await setUA(tvMode ? TV_UA : null);
     await call('Page.navigate', { url });
     await call('Page.bringToFront');
@@ -598,7 +659,7 @@ module.exports = {
       return true;
     } catch (e) {
       // Browser closed or crashed: relaunch it in kiosk mode.
-      if (kioskEnabled) { launch(); return true; }
+      if (kioskEnabled) { await launch(); return true; }
       return false;
     }
   },
