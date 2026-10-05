@@ -1,6 +1,7 @@
 // PCTV Home server: TV home screen + phone remote over HTTP/WebSocket.
 // Hosted by the desktop app (src/main) or run headless for development (src/server/cli.js).
 const { resolveAddress } = require('./lib/address');
+const { createSupporter } = require('./lib/supporter');
 const express = require('express');
 const http = require('http');
 const os = require('os');
@@ -46,6 +47,8 @@ function createServer(opts) {
   const events = new EventEmitter();
   fs.mkdirSync(DATA, { recursive: true });
   const icons = createIcons(path.join(DATA, 'icons'));
+  // "pay what you want": signed unlock codes, verified only here in the main process
+  const supporter = opts.supporter === false ? null : createSupporter({ dataDir: DATA });
 
   // ---------- persistent config + tiles ----------
   const readJSON = (f, fallback) => { try { return JSON.parse(fs.readFileSync(path.join(DATA, f), 'utf8')); } catch { return fallback; } };
@@ -102,6 +105,7 @@ function createServer(opts) {
     platform: process.platform, browser: browser.findBrowser(), devtools: browser.connected(),
     input: input.status(), remotes: remoteCount(), incognito: browser.isIncognito(),
   }));
+  app.get('/api/supporter', localOnly, (req, res) => res.json(supporter ? supporter.status() : { enabled: false }));
   app.get('/api/qr.svg', localOnly, async (req, res) => {
     const svg = await QRCode.toString(remoteUrl(), { type: 'svg', margin: 1, color: { dark: '#000000', light: '#ffffff' } });
     res.type('image/svg+xml').send(svg);
@@ -248,6 +252,11 @@ function createServer(opts) {
     ws.on('close', broadcastRemotes);
     ws.send(JSON.stringify({ t: 'focus', ...browser.focusState() }));
     if (stats.get()) ws.send(JSON.stringify({ t: 'stats', ...stats.get() }));
+    if (supporter?.enabled) {
+      // phones may get the support prompt (never the TV); at most every few days
+      const prompt = ws.isRemote && supporter.takePrompt({ force: process.env.PCTV_FORCE_NAG === '1' });
+      ws.send(JSON.stringify({ t: 'supporter', ...supporter.status(), prompt }));
+    }
     ws.on('message', raw => {
       let m; try { m = JSON.parse(raw); } catch { return; }
       switch (m.t) {
@@ -277,6 +286,19 @@ function createServer(opts) {
         }
         case 'bs': for (let i = 0; i < Math.min(Number(m.n) || 0, 200); i++) input.key('backspace'); break;
         case 'ping': ws.send('{"t":"pong"}'); break;
+        case 'supporter:status':
+          if (supporter) ws.send(JSON.stringify({ t: 'supporter', ...supporter.status(), prompt: false }));
+          break;
+        case 'supporter:redeem': {
+          if (!supporter) { ws.send(JSON.stringify({ t: 'supporter:redeem', ok: false, reason: 'disabled' })); break; }
+          if (!redeemAllowed()) { ws.send(JSON.stringify({ t: 'supporter:redeem', ok: false, reason: 'slow-down' })); break; }
+          supporter.redeem(String(m.code || '').slice(0, 4096)).then(r => {
+            ws.send(JSON.stringify({ t: 'supporter:redeem', ...r }));
+            if (r.ok) broadcast({ t: 'supporter', ...supporter.status(), prompt: false });
+          });
+          break;
+        }
+        case 'supporter:thanked': supporter?.markThanked(); break;
         case 'sys': system(m.a).then(
           msg => ws.send(JSON.stringify({ t: 'sys-ack', a: m.a, ok: true, msg })),
           e => ws.send(JSON.stringify({ t: 'sys-ack', a: m.a, ok: false, msg: e.message })));
@@ -288,6 +310,15 @@ function createServer(opts) {
   stats.events.on('update', st => broadcast({ t: 'stats', ...st }));
   browser.events.on('focus', info => broadcast({ t: 'focus', ...info }));
   browser.events.on('incognito', on => broadcast({ t: 'incognito', on }));
+
+  // a few code attempts per minute is plenty for a person pasting
+  const redeemTimes = [];
+  function redeemAllowed() {
+    const now = Date.now();
+    while (redeemTimes.length && now - redeemTimes[0] > 60000) redeemTimes.shift();
+    if (redeemTimes.length >= 10) return false;
+    redeemTimes.push(now); return true;
+  }
 
   // ---------- system actions ----------
   let powerTimer = null;
@@ -346,6 +377,7 @@ function createServer(opts) {
     return new Promise((resolve, reject) => {
       input.start();
       stats.start();
+      supporter?.recordLaunch();
       server.once('error', reject);
       server.listen(PORT, HOST, () => {
         browser.init({
@@ -372,7 +404,8 @@ function createServer(opts) {
   }
 
   return {
-    start, stop, events, system, broadcast,
+    start, stop, events, system, broadcast, supporter,
+    kioskForeground: () => browser.isForeground(),
     setBrowserPreference: p => browser.setPreference(p),
     setYoutubeFill: m => browser.setYoutubeFill(m),
     setSecureDns: v => browser.setSecureDns(v, { restart: true }),

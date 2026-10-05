@@ -168,6 +168,10 @@ The project layout, publishing steps and the Microsoft Store guide are in [docs/
 
 YouTube TV quality and identity fixes are adapted from [VacuumTube](https://github.com/shy1132/VacuumTube) (MIT). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
+## Support the developer
+
+PCTV Home is free. After a week it shows a small, click-through note in a corner of the TV and sometimes asks on the phone whether you'd like to support it, pay what you want from Rp 20.000. A supporter code removes both for good. Nothing is ever blocked, and it works fully offline.
+
 ## License
 
 PCTV Home is **free for personal and other noncommercial use** under the [PolyForm Noncommercial License 1.0.0](LICENSE).

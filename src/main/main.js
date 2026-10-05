@@ -4,6 +4,7 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, shell, dialog, systemPrefer
 const path = require('path');
 const fs = require('fs');
 const { createServer } = require('../server');
+const { createWatermark } = require('./watermark');
 
 const DEV = process.argv.includes('--dev');
 const ICONS = path.join(__dirname, 'icons'); // runtime copies of build/ icons (see scripts/make-icons.py)
@@ -75,6 +76,7 @@ function watchDisplays() {
     displayTimer = setTimeout(async () => { // wait until the OS has finished re-arranging the screens
       try {
         // only restarts the kiosk if its screen moved or its auto size changed
+        watermark?.replace();
         if (await server.setKioskPlacement(placement(), { restart: true })) {
           console.log('[display] screens changed, kiosk re-placed', JSON.stringify(placement()));
         }
@@ -104,7 +106,7 @@ function setStartAtLogin(on) {
 }
 
 // ---------- windows ----------
-let panel = null, tray = null, server = null;
+let panel = null, tray = null, server = null, watermark = null;
 const startedInBackground = process.argv.includes('--background') ||
   (process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAsHidden);
 
@@ -151,6 +153,31 @@ function buildTray() {
   if (process.platform === 'win32') tray.on('click', showPanel);
 }
 
+// ---------- unsupported-copy watermark on the TV ----------
+// Shown only while the kiosk is on screen and in front, and only for copies that
+// aren't unlocked after the grace period. The unlock is re-verified on every check.
+function startWatermark() {
+  const sup = server.supporter;
+  if (!sup?.enabled) return;
+  const force = process.env.PCTV_FORCE_WATERMARK === '1';
+  const moveEveryMs = Number(process.env.PCTV_WATERMARK_MOVE_MS) || sup.watermarkConfig.moveEveryMs; // env: testing only
+  watermark = createWatermark({ text: sup.watermarkText, moveEveryMs, getDisplay: kioskDisplay });
+  let running = false;
+  const tick = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const due = force ? !sup.isUnlocked() : sup.watermarkVisible();
+      const show = due && await server.kioskForeground();
+      if (show) await watermark.show(); else await watermark.hide();
+    } catch (e) { console.warn('[watermark]', e.message); }
+    finally { running = false; }
+  };
+  setInterval(tick, 3000);
+  setTimeout(tick, 1500);
+  sup.events.on('unlocked', tick); // hide right away after a code is redeemed
+}
+
 function restart() {
   app.isQuitting = true;
   try { server?.stop(); } catch {}
@@ -169,7 +196,7 @@ function ensureAccessibility() {
 // ---------- start ----------
 app.on('second-instance', showPanel);
 app.on('window-all-closed', e => e.preventDefault?.()); // stay in the tray
-app.on('before-quit', () => { app.isQuitting = true; server?.stop(); });
+app.on('before-quit', () => { app.isQuitting = true; watermark?.destroy(); server?.stop(); });
 app.on('activate', showPanel); // macOS dock click
 
 app.whenReady().then(async () => {
@@ -249,6 +276,7 @@ app.whenReady().then(async () => {
 
   buildTray();
   watchDisplays();
+  startWatermark();
   ensureAccessibility();
   if (settings.firstRun || !startedInBackground) showPanel(); // first run: show how to pair
   if (settings.firstRun) { settings.firstRun = false; saveSettings(); }

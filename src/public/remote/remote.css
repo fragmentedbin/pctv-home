@@ -192,3 +192,31 @@ button.primary { background: linear-gradient(135deg,#8B5CF6,#2563EB); color: #ff
 .opt-list .armed { background: #5c2b29; }
 .opt-list .armed b { color: #fff; }
 .app { -webkit-touch-callout: none; }
+
+/* support PCTV Home */
+.sup-row { width: 100%; margin-top: 10px; background: linear-gradient(135deg, #2a2347, #1f2a44); }
+.sup-row b::before { content: '♥ '; color: #f28bb6; }
+.sup-row.on { background: var(--surface2); }
+.sup-row.on b::before { content: ''; }
+.sup .sup-head { display: flex; align-items: center; gap: 10px; }
+.sup .sup-head h3 { margin: 0; }
+.sup-heart, .thx-heart { color: #f28bb6; font-size: 26px; line-height: 1; }
+.sup-pitch { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
+.sup-amount { margin: 0; font-weight: 600; }
+.sup-pay { display: block; text-align: center; padding: 14px; border-radius: 14px; font-weight: 600; text-decoration: none;
+  color: #fff; background: linear-gradient(135deg, #8B5CF6, #2563EB); }
+.sup-label { font-size: 13px; color: var(--muted); margin-top: 4px; }
+#supCode { font: 13px/1.4 ui-monospace, Menlo, monospace; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 12px; padding: 10px 12px; resize: none; width: 100%; -webkit-user-select: text; user-select: text; }
+#supCode:focus { border-color: var(--accent); outline: none; }
+.sup-did { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface2); }
+.sup-did small { display: block; font-size: 11px; color: var(--muted); }
+.sup-did code { font: 15px ui-monospace, Menlo, monospace; letter-spacing: .04em; -webkit-user-select: all; user-select: all; }
+.sup-did button { padding: 8px 14px; border-radius: 10px; background: var(--surface); flex: 0 0 auto; }
+.msg.bad { color: #f28b82; }
+.thx { align-items: center; text-align: center; padding-top: 30px; }
+.thx-heart { font-size: 54px; animation: thx-beat 1.2s ease-in-out 2; }
+.thx p { margin: 0; color: var(--muted); line-height: 1.45; }
+.thx .thx-sign { font-style: italic; color: var(--text); }
+.thx button { width: 100%; height: 50px; margin-top: 8px; }
+@keyframes thx-beat { 50% { transform: scale(1.18); } }

@@ -27,6 +27,8 @@
       if (m.t === 'hello' && !m.input) setStatus(true, 'Connected (dev)');
       if (m.t === 'hello' && m.version) $('#appVersion').textContent = 'v' + m.version;
       if (m.t === 'focus') onTvFocus(m);
+      if (m.t === 'supporter') onSupporter(m);
+      if (m.t === 'supporter:redeem') onRedeem(m);
       if (m.t === 'hello') setIncognito(m.incognito);
       if (m.t === 'incognito') setIncognito(m.on);
       if (m.t === 'sys-ack') onSysAck(m);
@@ -318,6 +320,111 @@
     setTimeout(() => ($('#restoreApps').textContent = 'Restore removed built-in apps'), 2500);
     loadApps();
   });
+
+  // ---------- support PCTV Home (pay what you want) ----------
+  // The phone never decides anything: it shows what the PC reports and sends
+  // pasted codes to the PC, which checks the signature.
+  const ID = /^(id|ms)\b/i.test(navigator.language || '');
+  const T = ID ? {
+    supTitle: 'Dukung PCTV Home',
+    supPitch: 'PCTV Home gratis dan dibuat sendiri oleh satu developer. Kalau aplikasinya bermanfaat, traktir kopi biar update terus jalan.',
+    supAmount: 'Dukung developer, mulai Rp 20.000, seikhlasnya.',
+    supPay: 'Dukung sekarang',
+    supCodeLabel: 'Sudah dukung? Tempel kode buka kunci di sini',
+    supRedeem: 'Buka kunci',
+    supDid: 'ID perangkat (kirim ke developer saat minta kode)',
+    supCopy: 'Salin',
+    supCopied: 'Tersalin',
+    supLater: 'Nanti saja',
+    thxTitle: 'Terima kasih sudah mendukung PCTV Home!',
+    thxBody: 'Dukunganmu bikin PCTV Home terus berkembang. Tanda di layar TV sudah hilang. Selamat menonton!',
+    thxOk: 'Sama-sama',
+    rowLocked: 'Dukung PCTV Home', rowLockedSub: 'Seikhlasnya, mulai Rp 20.000',
+    rowOk: 'Supporter ♥', rowOkSub: 'Terima kasih sudah mendukung',
+    checking: 'Memeriksa kode…',
+    reasons: { malformed: 'Kodenya tidak lengkap. Salin ulang seluruh kode.', 'bad-signature': 'Kode tidak valid.',
+      'wrong-device': 'Kode ini untuk perangkat lain. Cek ID perangkat di bawah.', unsupported: 'Kode dari versi lebih baru. Perbarui PCTV Home.',
+      'slow-down': 'Terlalu banyak percobaan, tunggu sebentar.', disabled: 'Fitur ini belum aktif.', empty: 'Tempel kodenya dulu.' },
+  } : {
+    supTitle: 'Support PCTV Home',
+    supPitch: 'PCTV Home is free and made by one developer. If it\'s useful to you, chip in so the updates keep coming.',
+    supAmount: 'Pay what you want, from Rp 20,000 (about $1.25).',
+    supPay: 'Support now',
+    supCodeLabel: 'Already supported? Paste your unlock code',
+    supRedeem: 'Unlock',
+    supDid: 'Device ID (send it to the developer to get a code)',
+    supCopy: 'Copy',
+    supCopied: 'Copied',
+    supLater: 'Not now',
+    thxTitle: 'Thank you for supporting PCTV Home!',
+    thxBody: 'Your support keeps PCTV Home going. The note on the TV is gone. Enjoy!',
+    thxOk: 'You\'re welcome',
+    rowLocked: 'Support PCTV Home', rowLockedSub: 'Pay what you want',
+    rowOk: 'Supporter ♥', rowOkSub: 'Thanks for supporting',
+    checking: 'Checking the code…',
+    reasons: { malformed: 'The code is incomplete. Copy the whole code again.', 'bad-signature': 'That code isn\'t valid.',
+      'wrong-device': 'This code is for another device. Check the device ID below.', unsupported: 'This code is from a newer version. Update PCTV Home.',
+      'slow-down': 'Too many tries, wait a minute.', disabled: 'Not available yet.', empty: 'Paste the code first.' },
+  };
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = T[el.dataset.i18n]; });
+  let sup = null;
+  function onSupporter(m) {
+    sup = m;
+    $('#supRow').hidden = !m.enabled;
+    $('#supRowTitle').textContent = m.unlocked ? T.rowOk : T.rowLocked;
+    $('#supRowSub').textContent = m.unlocked ? T.rowOkSub : T.rowLockedSub;
+    $('#supRow').classList.toggle('on', !!m.unlocked);
+    $('#supDid').textContent = m.deviceId;
+    const u = new URL(m.supportUrl, location.href); u.searchParams.set('did', m.deviceId);
+    $('#supPay').href = u.href;
+    if (m.unlocked) {
+      $('#supSheet').hidden = true;
+      if (m.showThanks) { closeSheets(); $('#thxSheet').hidden = false; }
+    } else if (m.prompt) {
+      setTimeout(() => { if (document.querySelectorAll('.sheet:not([hidden])').length === 0) openSupport(); }, 1500);
+    }
+  }
+  function openSupport() {
+    if (!sup || sup.unlocked) return;
+    closeSheets();
+    $('#supMsg').textContent = ''; $('#supMsg').className = 'msg';
+    $('#supSheet').hidden = false;
+  }
+  function onRedeem(m) {
+    $('#supRedeem').disabled = false;
+    if (m.ok) { $('#supCode').value = ''; return; } // the 'supporter' broadcast brings the thank-you
+    $('#supMsg').textContent = T.reasons[m.reason] || T.reasons['bad-signature'];
+    $('#supMsg').className = 'msg bad';
+  }
+  $('#supRedeem').addEventListener('click', () => {
+    const code = $('#supCode').value.trim();
+    if (!code) { $('#supMsg').textContent = T.reasons.empty; return; }
+    $('#supRedeem').disabled = true;
+    $('#supMsg').textContent = T.checking; $('#supMsg').className = 'msg';
+    send({ t: 'supporter:redeem', code });
+    setTimeout(() => ($('#supRedeem').disabled = false), 4000);
+  });
+  $('#supCopy').addEventListener('click', async () => {
+    const id = $('#supDid').textContent;
+    let ok = false;
+    try { await navigator.clipboard.writeText(id); ok = true; } catch {}
+    if (!ok) { // http:// pages have no clipboard API on most phones
+      const t = document.createElement('textarea');
+      t.value = id; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
+      document.body.appendChild(t); t.select(); t.setSelectionRange(0, id.length);
+      try { ok = document.execCommand('copy'); } catch {}
+      t.remove();
+    }
+    if (ok) { $('#supCopy').textContent = T.supCopied; setTimeout(() => ($('#supCopy').textContent = T.supCopy), 1500); }
+    else { // last resort: select it so the user can copy by hand
+      const r = document.createRange(); r.selectNodeContents($('#supDid'));
+      getSelection().removeAllRanges(); getSelection().addRange(r);
+    }
+  });
+  $('#supLater').addEventListener('click', closeSheets);
+  $('#thxSheet').addEventListener('click', e => { if (e.target === $('#thxSheet')) send({ t: 'supporter:thanked' }); });
+  $('#thxOk').addEventListener('click', () => { send({ t: 'supporter:thanked' }); closeSheets(); });
+  $('#supRow').addEventListener('click', () => { if (sup && !sup.unlocked) openSupport(); });
 
   // ---------- one-tap restart ----------
   $('#restartBtn').addEventListener('click', () => {

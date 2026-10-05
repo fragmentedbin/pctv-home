@@ -101,6 +101,7 @@
         <button class="sys" data-sys="restart-browser"><b>Restart browser</b><small>Close and reopen the kiosk</small></button>
         <button class="sys" data-sys="exit-kiosk" data-confirm="Close the kiosk browser?"><b>Exit kiosk</b><small>Show the Windows desktop</small></button>
       </div>
+      <button class="sys sup-row" id="supRow" hidden><b id="supRowTitle"></b><small id="supRowSub"></small></button>
       <button class="sys incog" id="incogSys" data-sys="incognito-toggle"><b id="incogSysTitle">Incognito mode</b><small id="incogSysSub">Private session on the TV. No logins or history are kept</small></button>
       <div class="sys-screens" id="sysScreens" hidden>
         <small>Show TV Home on</small>
@@ -141,6 +142,36 @@
       </div>
       <p id="tMsg" class="msg"></p>
       <button class="link" data-close>Close</button>
+    </div>
+  </div>
+
+  <!-- support PCTV Home (pay what you want) -->
+  <div class="sheet" id="supSheet" hidden>
+    <div class="sheet-card sup">
+      <div class="sup-head"><span class="sup-heart">♥</span><h3 data-i18n="supTitle"></h3></div>
+      <p class="sup-pitch" data-i18n="supPitch"></p>
+      <p class="sup-amount" data-i18n="supAmount"></p>
+      <a class="sup-pay" id="supPay" target="_blank" rel="noopener" data-i18n="supPay"></a>
+      <label class="sup-label" for="supCode" data-i18n="supCodeLabel"></label>
+      <textarea id="supCode" rows="2" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
+      <div class="sheet-row"><button id="supRedeem" class="primary" data-i18n="supRedeem"></button></div>
+      <p id="supMsg" class="msg"></p>
+      <div class="sup-did">
+        <span><small data-i18n="supDid"></small><code id="supDid"></code></span>
+        <button id="supCopy" data-i18n="supCopy"></button>
+      </div>
+      <button class="link" id="supLater" data-i18n="supLater"></button>
+    </div>
+  </div>
+
+  <!-- one-time thank you -->
+  <div class="sheet" id="thxSheet" hidden>
+    <div class="sheet-card thx">
+      <div class="thx-heart">♥</div>
+      <h3 data-i18n="thxTitle"></h3>
+      <p data-i18n="thxBody"></p>
+      <p class="thx-sign">Muhammad Maududy</p>
+      <button class="primary" id="thxOk" data-i18n="thxOk"></button>
     </div>
   </div>
 

@@ -1,0 +1,19 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; cursor: none; user-select: none; }
+  body { display: flex; align-items: center; justify-content: flex-end; padding: 0 4px; box-sizing: border-box; }
+  body.left { justify-content: flex-start; }
+  #t { font: 500 15px/1.2 "Segoe UI", system-ui, -apple-system, sans-serif; color: #fff; white-space: nowrap;
+       opacity: 0; transition: opacity .8s ease; text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 0 6px rgba(0,0,0,.6); }
+  #t.on { opacity: .4; }
+</style></head>
+<body><span id="t"></span>
+<script>
+  const t = document.getElementById('t');
+  t.textContent = new URLSearchParams(location.search).get('text') || '';
+  window.fadeIn = left => { document.body.classList.toggle('left', !!left); t.classList.add('on'); };
+  window.fadeOut = () => t.classList.remove('on');
+</script>
+</body></html>

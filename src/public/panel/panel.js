@@ -6,7 +6,7 @@
   function check(state, title, detail, action) {
     const li = document.createElement('li');
     li.className = state;
-    li.innerHTML = `<span class="i">${state === 'ok' ? '✓' : '!'}</span><span><b></b><small></small></span>`;
+    li.innerHTML = `<span class="i">${state === 'ok' ? '✓' : state === 'sup' ? '♥' : '!'}</span><span><b></b><small></small></span>`;
     li.querySelector('b').textContent = title;
     li.querySelector('small').textContent = detail || '';
     if (action) {
@@ -53,6 +53,10 @@
       list.push(check('warn', 'Allow Accessibility access', 'macOS needs this so the phone remote can control the screen. Turn on PCTV Home, then restart it.',
         { label: 'Open Accessibility settings', run: () => post('/api/app', { action: 'accessibility' }) }));
     } else list.push(check('warn', 'Remote input unavailable on this system', 'Navigation inside the TV Home still works'));
+    const sup = await fetch('/api/supporter').then(r => r.json()).catch(() => ({}));
+    if (sup.enabled) list.push(sup.unlocked
+      ? check('ok', 'Supporter', `Thank you for supporting PCTV Home · device ${sup.deviceId}`)
+      : check('sup', 'Support PCTV Home', `Pay what you want, from the ♥ in the phone remote's ⏻ menu · device ${sup.deviceId}`));
     list.push(check('ok', 'Phone address', `${info.ip}:${info.port} — phone and PC must be on the same Wi-Fi`));
     $('#checks').replaceChildren(...list);
 

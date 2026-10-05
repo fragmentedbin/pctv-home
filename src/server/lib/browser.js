@@ -620,6 +620,15 @@ module.exports = {
     return 'handled';
   },
 
+  /** Is the kiosk on screen and in front (not minimised, not behind another app)? */
+  async isForeground() {
+    if (!conn) return false;
+    try {
+      const r = await call('Runtime.evaluate', { returnByValue: true, expression: "document.visibilityState === 'visible' && document.hasFocus()" });
+      return r.result?.value === true;
+    } catch { return false; }
+  },
+
   async currentUrl() {
     try {
       await connect();
