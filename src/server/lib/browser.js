@@ -307,7 +307,9 @@ async function connect() {
     await call('Page.addScriptToEvaluateOnNewDocument', { source: NAV_SCRIPT });
     await call('Runtime.evaluate', { expression: NAV_SCRIPT });
   } catch (e) { console.warn('[browser] focus hook failed:', e.message); }
-  ensureFullscreen(c.targetId);
+  ensureFullscreen(c.targetId, 'connected');
+  // Edge on Windows can restore its old window size a moment after starting: check again
+  setTimeout(() => conn === c && ensureFullscreen(c.targetId, 'after 4 s'), 4000);
   if (!defaultUA) {
     try { defaultUA = (await call('Browser.getVersion')).userAgent.replace('HeadlessChrome', 'Chrome'); } catch {}
   }
@@ -317,14 +319,17 @@ async function connect() {
 // The kiosk must always cover the whole screen. If Chrome/Edge opened as a normal
 // window (e.g. a copy using the same profile was still running in the background,
 // so --kiosk was ignored), switch the window to full screen ourselves.
-async function ensureFullscreen(targetId) {
+async function ensureFullscreen(targetId, when = '') {
   if (!kioskEnabled) return;
   try {
     const { windowId, bounds } = await call('Browser.getWindowForTarget', { targetId });
-    if (bounds.windowState === 'fullscreen') return;
-    console.warn(`[browser] kiosk window was "${bounds.windowState}", switching to full screen`);
-    if (bounds.windowState === 'minimized') await call('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
+    const b = `${bounds.width}x${bounds.height} at ${bounds.left},${bounds.top}`;
+    if (bounds.windowState === 'fullscreen') { if (when) console.log(`[browser] window ${when}: fullscreen ${b}`); return; }
+    console.warn(`[browser] window ${when}: "${bounds.windowState}" ${b}, switching to full screen`);
+    if (bounds.windowState !== 'normal') await call('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
     await call('Browser.setWindowBounds', { windowId, bounds: { windowState: 'fullscreen' } });
+    const after = (await call('Browser.getWindowForTarget', { targetId })).bounds;
+    console.log(`[browser] window now "${after.windowState}" ${after.width}x${after.height}`);
   } catch (e) { console.warn('[browser] could not check the window state:', e.message); }
 }
 
