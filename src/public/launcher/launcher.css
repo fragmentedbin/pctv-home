@@ -331,3 +331,19 @@ body.incognito .backdrop { filter: grayscale(.85) brightness(.75); }
 .qr-card[hidden] { display: none; }
 #remoteChip.focusable { cursor: default; }
 #remoteChip.focusable.focused { transform: scale(1.06); box-shadow: 0 0 0 3px #fff; }
+
+/* ---------- screensaver (OLED friendly: true black, dim, small, moving) ---------- */
+.saver { position: fixed; inset: 0; z-index: 100; background: #000; cursor: none; }
+.saver[hidden] { display: none; }
+.saver-inner { position: absolute; left: 40px; top: 40px; max-width: 70vw; color: #6f747d; white-space: nowrap; }
+.saver-time { font-size: clamp(3.5rem, 8vw, 8rem); font-weight: 300; line-height: 1; font-variant-numeric: tabular-nums; }
+.saver-date { font-size: clamp(1rem, 1.6vw, 1.8rem); margin-top: .5em; color: #565b63; }
+.saver-np { font-size: clamp(.9rem, 1.3vw, 1.5rem); margin-top: .8em; color: #565b63; overflow: hidden; text-overflow: ellipsis; }
+.saver-np:empty { display: none; }
+/* while it shows: nothing animates or repaints behind it */
+html.saving body > *:not(.saver) { display: none !important; }
+html.saving *, html.saving *::before, html.saving *::after { animation: none !important; transition: none !important; }
+
+/* chips never wrap, and the remote chip keeps one width whatever it says, so the top bar doesn't shift */
+.chip, .chip > * { white-space: nowrap; }
+#remoteChip { min-width: 12.8em; justify-content: center; }

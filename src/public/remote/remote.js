@@ -445,13 +445,6 @@
   $('#thxOk').addEventListener('click', () => { send({ t: 'supporter:thanked' }); closeSheets(); });
   $('#supRow').addEventListener('click', () => { if (sup && !sup.unlocked) openSupport(); });
 
-  // ---------- one-tap restart ----------
-  $('#restartBtn').addEventListener('click', () => {
-    $('#restartBtn').classList.add('spin');
-    send({ t: 'sys', a: 'restart-app' });
-    setTimeout(() => $('#restartBtn').classList.remove('spin'), 6000);
-  });
-
   // ---------- PC status strip ----------
   const pingClass = ms => ms == null ? 'bad' : ms < 40 ? 'good' : ms < 100 ? 'ok' : 'bad';
   const esc = t => String(t).replace(/[<>&"]/g, '');
@@ -536,7 +529,7 @@
     document.body.classList.toggle('incognito', !!on);
   }
   function onSysAck(m) {
-    if (m.a === 'restart-app' && !m.ok) { $('#restartBtn').classList.remove('spin'); setStatus(true, m.msg); }
+    if ((m.a === 'restart-app' || m.a === 'restart-tv') && !m.ok) { setStatus(true, m.msg); }
     $('#sysMsg').textContent = m.ok ? m.msg : 'Failed: ' + m.msg;
     if (m.ok && (m.a === 'reboot' || m.a === 'shutdown')) $('#sysCancel').hidden = false;
     if (m.a === 'cancel-power') $('#sysCancel').hidden = true;

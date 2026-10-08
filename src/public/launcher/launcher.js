@@ -9,6 +9,7 @@
   const COLORS = [DEFAULT_COLOR, '#1db954', '#e50914', '#1f80e0', '#7b2cbf', '#ff6d00', '#00897b', '#c2185b'];
 
   let tiles = [];
+  let saverOn = false;   // the screensaver is showing: background work pauses
   let focused = null;
   let lastMainFocus = 0;
   let pendingDelete = null;
@@ -19,6 +20,7 @@
 
   // ---------- clock ----------
   function tick() {
+    if (saverOn) return;
     const d = new Date();
     $('#clock').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     $('#date').textContent = d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' });
@@ -374,6 +376,7 @@
   // ---------- screen picker (2+ displays) ----------
   let displays = [];
   async function loadDisplays() {
+    if (saverOn) return;
     try { displays = await (await fetch('/api/displays')).json(); } catch { displays = []; }
     const btn = $('#screenBtn');
     btn.hidden = displays.length < 2;
@@ -442,6 +445,7 @@
     return `<svg class="bat-ico" viewBox="0 0 26 18"><rect x="1" y="2" width="20" height="14" rx="3"/><path d="M23.5 7v4"/><rect class="lvl" x="3.5" y="4.5" width="${w}" height="9" rx="1.2"/>${charging ? '<path d="M12.5 3.5l-3 6h3l-1.5 5 4-6.5h-3l1.5-4.5z" fill="#0a0b0f" stroke="none"/>' : ''}</svg>`;
   }
   function renderStats(st) {
+    if (saverOn) return; // nobody is looking; the next update after waking redraws it
     const n = st.net || {}, b = st.battery || {};
     const nc = $('#netChip');
     nc.hidden = false;
@@ -464,6 +468,7 @@
   // ---------- background playback ("Now playing") ----------
   const npPost = a => fetch('/api/nowplaying/' + a, { method: 'POST' }).then(r => r.json()).catch(() => ({ ok: false }));
   function renderNowPlaying(np) {
+    nowPlaying = np;
     const box = $('#np'), was = !box.hidden;
     box.hidden = !np;
     if (!np) {
@@ -564,7 +569,7 @@
     if (n === 0 || remoteN === 0) qrPinned = false; // a fresh connection hides the QR again
     remoteN = n;
     $('#remoteChip').dataset.state = n > 0 ? 'on' : 'off';
-    $('#remoteChipText').textContent = n > 0 ? (n === 1 ? 'Remote connected' : `${n} remotes connected`) : 'No remote';
+    $('#remoteChipText').textContent = n > 1 ? `${n} remotes` : n === 1 ? 'Remote connected' : 'No remote';
     updateQr();
   }
   $('#remoteChip').addEventListener('click', () => { if (remoteN > 0) { qrPinned = !qrPinned; updateQr(); } });
@@ -580,7 +585,7 @@
       if (m.t === 'update') renderUpdate(m);
       if (m.t === 'nowplaying') renderNowPlaying(m.np);
       if (m.t === 'reload-ui') location.reload();
-      if (m.t === 'incognito') setIncognito(m.on);
+      if (m.t === 'incognito') { setIncognito(m.on); loadResume(); }
       if (m.t === 'hold') { // long-press OK on the phone
         if (movingId) endMove();
         else if (activeLayer() === $('#main') && focusedTile()) openOptions(focusedTile());
@@ -595,11 +600,92 @@
     ws.onclose = () => setTimeout(connectWs, 2000);
   }
 
+  // ---------- continue where you left off ----------
+  async function loadResume() {
+    const b = $('#resumeBtn');
+    try {
+      const s = await (await fetch('/api/session')).json();
+      if (!s.url || (nowPlaying && nowPlaying.app === s.app)) { b.hidden = true; return; } // already running in the background
+      const m = Math.floor((s.pos || 0) / 60), sec = String((s.pos || 0) % 60).padStart(2, '0');
+      $('#resumeText').textContent = `Continue ${s.app}` + (s.pos > 15 ? ` · ${m}:${sec}` : '');
+      b.title = '';
+      b.hidden = false;
+    } catch { b.hidden = true; }
+  }
+  $('#resumeBtn').addEventListener('click', async () => {
+    toast('Opening where you left off…');
+    try { const r = await (await fetch('/api/session/resume', { method: 'POST' })).json(); if (!r.ok) { toast('Nothing to continue'); loadResume(); } } catch {}
+  });
+
+  // ---------- screensaver / low power ----------
+  // After a while without input the home screen turns into a black screen with a small, dim clock
+  // (nothing bright and nothing static, so OLED panels don't burn in). While it shows, every timer
+  // and animation that isn't needed stops, and after a longer while the PC turns the display off.
+  // Any key, click, touch or phone-remote press wakes it.
+  const SAVER = { after: 5, off: 30 };                      // minutes; 0 = never (set in the settings panel)
+  let saverTimer = null, offTimer = null, clockTimer = null, hopTimer = null, saverSince = 0, lastActivity = 0, nowPlaying = null;
+  async function loadSaverCfg() {
+    try {
+      const c = await (await fetch('/api/saver')).json();
+      SAVER.after = Math.max(0, +c.after || 0); SAVER.off = Math.max(0, +c.off || 0);
+    } catch {}
+    armSaver();
+  }
+  function armSaver() {
+    clearTimeout(saverTimer);
+    if (saverOn || !SAVER.after || document.hidden) return;
+    saverTimer = setTimeout(startSaver, SAVER.after * 60000);
+  }
+  function saverFrame() {
+    const d = new Date();
+    $('#saverTime').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    $('#saverDate').textContent = d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' });
+    const np = nowPlaying && nowPlaying.playing ? nowPlaying : null;
+    $('#saverNp').textContent = np ? `${np.title}${np.artist ? ' · ' + np.artist : ''}` : '';
+    // hop to a new random spot so no pixel stays lit for long
+    const box = $('#saverInner'), w = box.offsetWidth, h = box.offsetHeight;
+    box.style.left = Math.round(Math.random() * Math.max(0, innerWidth - w - 80) + 40) + 'px';
+    box.style.top = Math.round(Math.random() * Math.max(0, innerHeight - h - 80) + 40) + 'px';
+  }
+  function startSaver() {
+    if (saverOn || document.hidden) return;
+    saverOn = true; saverSince = performance.now();
+    document.documentElement.classList.add('saving');
+    $('#saver').hidden = false;
+    saverFrame();
+    // one redraw a minute, right when the minute changes; nothing else runs
+    const nextMinute = () => 60000 - (Date.now() % 60000) + 50;
+    const tickSaver = () => { saverFrame(); clockTimer = setTimeout(tickSaver, nextMinute()); };
+    clockTimer = setTimeout(tickSaver, nextMinute());
+    if (SAVER.off) offTimer = setTimeout(() => { fetch('/api/sys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ a: 'screen-off' }) }).catch(() => {}); }, SAVER.off * 60000);
+  }
+  function stopSaver() {
+    saverOn = false;
+    clearTimeout(clockTimer); clearTimeout(offTimer);
+    $('#saver').hidden = true;
+    document.documentElement.classList.remove('saving');
+    tick();
+    armSaver();
+    loadSaverCfg(); // pick up changes made in the settings panel
+  }
+  // capture on window: a key that wakes the screen must not also press a button underneath
+  for (const ev of ['keydown', 'mousedown', 'touchstart', 'wheel', 'mousemove', 'pointerdown']) {
+    window.addEventListener(ev, e => {
+      if (saverOn) {
+        if (ev === 'mousemove' && performance.now() - saverSince < 1500) return; // jitter right after it started
+        e.preventDefault(); e.stopImmediatePropagation(); stopSaver(); return;
+      }
+      const t = performance.now();
+      if (t - lastActivity > 1000) { lastActivity = t; armSaver(); }
+    }, true);
+  }
+  document.addEventListener('visibilitychange', () => { document.hidden ? clearTimeout(saverTimer) : armSaver(); });
+
   window.addEventListener('pageshow', () => {
     $('#splash').hidden = true;
     $('#qr').src = '/api/qr.svg?' + Date.now();
     loadInfo();
   });
 
-  loadTiles(); loadInfo(); connectWs();
+  loadTiles(); loadInfo(); connectWs(); loadSaverCfg(); loadResume();
 })();

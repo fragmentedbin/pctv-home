@@ -59,3 +59,47 @@ test('only checked sites keep the D-pad; every other site is touchpad-only', () 
   assert.equal(noDpad('not a url'), false);
   assert.match(require('../src/server/lib/tv-nav'), /const DPAD_HOSTS = \["localhost","127\.0\.0\.1","youtube\.com"\]/);
 });
+
+test('screensaver settings are served and the screen can be turned off (dry run)', async () => {
+  process.env.PCTV_DRY_POWER = '1';
+  const os = require('os'), fs = require('fs'), path = require('path');
+  const { createServer } = require('../src/server');
+  const port = 4100 + Math.floor(Math.random() * 80);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pctv-saver-'));
+  const srv = createServer({ dataDir: dir, port, host: '127.0.0.1' });
+  await srv.start();
+  try {
+    const cfg = await (await fetch(`http://127.0.0.1:${port}/api/saver`)).json();
+    assert.deepEqual(cfg, { after: 5, off: 30 }); // defaults when run without the desktop shell
+    const r = await (await fetch(`http://127.0.0.1:${port}/api/sys`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ a: 'screen-off' }) })).json();
+    assert.equal(r.ok, true);
+    assert.equal(r.msg, 'Screen off');
+  } finally { srv.stop(); fs.rmSync(dir, { recursive: true, force: true }); delete process.env.PCTV_DRY_POWER; }
+});
+
+test('continue where you left off: saved page, YouTube position, restart flag', () => {
+  const os = require('os'), fs = require('fs'), path = require('path');
+  const { createSession, resumeUrl } = require('../src/server/lib/session');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pctv-session-'));
+  try {
+    const s = createSession(dir);
+    assert.equal(s.load(), null);
+    assert.equal(s.save({ url: 'about:blank' }), false);                 // only web pages
+    assert.equal(s.save({ url: 'https://www.youtube.com/watch?v=abc', pos: 120, dur: 600, tv: false }), true);
+    assert.equal(s.save({ url: 'https://www.youtube.com/watch?v=abc', pos: 122, dur: 600 }), false); // barely moved
+    assert.equal(s.save({ url: 'https://www.youtube.com/watch?v=abc', pos: 130, dur: 600 }), true);
+    assert.equal(s.load().pos, 130);
+    // flag is read once, and only when it is fresh
+    assert.equal(s.takeResume(), false);
+    s.markResume(); assert.equal(s.takeResume(), true); assert.equal(s.takeResume(), false);
+    // too old: ignored
+    const f = path.join(dir, 'session.json');
+    fs.writeFileSync(f, JSON.stringify({ url: 'https://x.com/', at: Date.now() - 25 * 3600 * 1000 }));
+    assert.equal(s.load(), null);
+    // resume address
+    assert.equal(resumeUrl({ url: 'https://www.youtube.com/watch?v=abc', pos: 130, dur: 600 }), 'https://www.youtube.com/watch?v=abc&t=130s');
+    assert.equal(resumeUrl({ url: 'https://www.youtube.com/watch?v=abc', pos: 5, dur: 600 }), 'https://www.youtube.com/watch?v=abc');   // just started
+    assert.equal(resumeUrl({ url: 'https://www.youtube.com/watch?v=abc', pos: 590, dur: 600 }), 'https://www.youtube.com/watch?v=abc'); // nearly done
+    assert.equal(resumeUrl({ url: 'https://open.spotify.com/track/1', pos: 99 }), 'https://open.spotify.com/track/1');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

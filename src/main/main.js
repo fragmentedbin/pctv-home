@@ -19,7 +19,7 @@ app.setAppUserModelId('com.fragmentedbin.pctvhome');
 
 // ---------- settings ----------
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
-let settings = { openOnStart: true, firstRun: true, browser: 'auto', youtubeFill: 'auto', uiScale: 'auto', display: 'primary', secureDns: 'off', autoUpdate: true };
+let settings = { openOnStart: true, firstRun: true, browser: 'auto', youtubeFill: 'auto', uiScale: 'auto', display: 'primary', secureDns: 'off', autoUpdate: true, screensaver: 5, screenOff: 30 };
 
 // ---------- TV size (kiosk UI scale) ----------
 // 'auto' sizes websites for viewing from the couch on whatever screen the kiosk is
@@ -139,7 +139,10 @@ function trayImage() {
 // ---------- updates ----------
 function installUpdate() {
   const u = updater.state();
-  if (u.status === 'ready' && u.canInstall) app.isQuitting = true; // let the window close so the installer can run
+  if (u.status === 'ready' && u.canInstall) {
+    app.isQuitting = true; // let the window close so the installer can run
+    try { server?.markResume(); } catch {} // after the update, reopen what was on screen
+  }
   return updater.install();
 }
 function updateMenuItems() {
@@ -250,6 +253,8 @@ app.whenReady().then(async () => {
         display: (() => { const d = kioskDisplay(); return { width: d.size.width * d.scaleFactor, height: d.size.height * d.scaleFactor, osScale: d.scaleFactor }; })(),
         store: isStore,
         autoUpdate: settings.autoUpdate !== false,
+        screensaver: settings.screensaver ?? 5,
+        screenOff: settings.screenOff ?? 30,
         update: updater?.state() || null,
         packaged: app.isPackaged,
         accessibility: process.platform === 'darwin' ? systemPreferences.isTrustedAccessibilityClient(false) : null,
@@ -279,6 +284,8 @@ app.whenReady().then(async () => {
         if (['off', 'cloudflare', 'google', 'quad9', 'adguard'].includes(body.secureDns)) {
           settings.secureDns = body.secureDns; saveSettings(); await server.setSecureDns(body.secureDns);
         }
+        if ([0, 2, 5, 10, 15].includes(body.screensaver)) { settings.screensaver = body.screensaver; saveSettings(); }
+        if ([0, 15, 30, 60, 120].includes(body.screenOff)) { settings.screenOff = body.screenOff; saveSettings(); }
         if (typeof body.autoUpdate === 'boolean') { settings.autoUpdate = body.autoUpdate; saveSettings(); }
         if (body.action === 'update-check' && updater) updater.check(true);
         if (body.action === 'update-install' && updater) return installUpdate();

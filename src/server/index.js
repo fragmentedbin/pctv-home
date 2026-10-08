@@ -15,6 +15,7 @@ const QRCode = require('qrcode');
 const input = require('./lib/input');
 const browser = require('./lib/browser');
 const { noDpad } = require('./lib/dpad-sites');
+const { createSession } = require('./lib/session');
 const createIcons = require('./lib/icons');
 const stats = require('./lib/stats');
 const power = require('./lib/power');
@@ -52,6 +53,7 @@ function createServer(opts) {
   fs.mkdirSync(DATA, { recursive: true });
   const icons = createIcons(path.join(DATA, 'icons'));
   // "pay what you want": signed unlock codes, verified only here in the main process
+  const session = createSession(DATA);
   const supporter = opts.supporter === false ? null : createSupporter({ dataDir: DATA });
 
   // ---------- persistent config + tiles ----------
@@ -116,6 +118,11 @@ function createServer(opts) {
   });
 
   // desktop-app settings for the control panel (start at login etc.)
+  // screensaver timings (minutes, 0 = never) chosen in the settings panel
+  app.get('/api/saver', localOnly, (req, res) => {
+    const st = opts.app?.getState?.() || {};
+    res.json({ after: st.screensaver ?? 5, off: st.screenOff ?? 30 });
+  });
   app.get('/api/app', localOnly, (req, res) => res.json(opts.app?.getState?.() || {}));
   app.post('/api/app', localOnly, async (req, res) => {
     try { res.json(await opts.app?.update?.(req.body || {}) || {}); } catch (e) { res.status(400).json({ error: e.message }); }
@@ -272,6 +279,7 @@ function createServer(opts) {
     }
     ws.on('message', raw => {
       let m; try { m = JSON.parse(raw); } catch { return; }
+      if (displayIsOff && ['key', 'back', 'hold', 'home', 'move', 'click', 'wheel', 'text', 'bs', 'seek-back', 'seek-fwd', 'sys'].includes(m.t)) wakeDisplay(); // any press on the phone turns the screen back on
       switch (m.t) {
         case 'key':
           if (m.k === 'playpause') doPlayPause();
@@ -333,6 +341,10 @@ function createServer(opts) {
     if (on !== mediaOn) { mediaOn = on; broadcast({ t: 'media', on }); }
   }, 2000);
 
+  // The PC's display was turned off by the screensaver; any remote input switches it back on.
+  let displayIsOff = false;
+  function wakeDisplay() { displayIsOff = false; power.displayOn().catch(() => {}); }
+
   // Apps without D-pad support (Netflix...): tell the phones to switch to the touchpad.
   let touchOnly = false;
   function updateTouchOnly(url) {
@@ -340,6 +352,41 @@ function createServer(opts) {
     if (v !== touchOnly) { touchOnly = v; broadcast({ t: 'padmode', touch: v }); }
   }
   browser.events.on('url', updateTouchOnly);
+
+  // "Continue where you left off": remember the page + video position every few seconds (never in
+  // incognito), and offer to reopen it - automatically after the app restarted itself (an update).
+  const sessionTimer = setInterval(async () => {
+    if (!browser.connected() || browser.isIncognito()) return;
+    const s = await browser.snapshot();
+    if (s) session.save(s);
+  }, 10000);
+  const resumable = () => {
+    if (browser.isIncognito()) return null;
+    const s = session.load();
+    return s ? { url: s.url, tv: !!s.tv, title: s.title || '', pos: s.pos || 0, app: browser.appLabel(new URL(s.url).hostname) } : null;
+  };
+  app.get('/api/session', localOnly, (req, res) => res.json(resumable() || {}));
+  app.post('/api/session/resume', localOnly, async (req, res) => {
+    const s = session.load();
+    if (!s || browser.isIncognito()) return res.json({ ok: false });
+    try { await browser.open(session.resumeUrl(s), !!s.tv); res.json({ ok: true }); }
+    catch (e) { res.status(500).json({ ok: false, msg: e.message }); }
+  });
+  function autoResume() {
+    let tries = 0;
+    const t = setInterval(async () => {
+      if (++tries > 40) return clearInterval(t);
+      if (!browser.connected()) return;
+      clearInterval(t);
+      const s = session.load();
+      if (!s || browser.isIncognito()) return;
+      // the kiosk browser may still be on that very site (it survives an app restart): leave it alone
+      const cur = browser.lastUrl();
+      try { if (cur && new URL(cur).hostname === new URL(s.url).hostname) return; } catch {}
+      console.log('[session] continuing where you left off:', s.url.slice(0, 80));
+      browser.open(session.resumeUrl(s), !!s.tv).catch(() => {});
+    }, 1000);
+  }
 
   // An app playing in the background (parked tab): the launcher shows a "Now playing" card.
   let npJson = 'null', npBusy = false;
@@ -385,6 +432,7 @@ function createServer(opts) {
     if (!opts.onRestart) throw new Error('Restart is not available in this mode');
     console.log(`[sys] restarting (${reason})`);
     broadcast({ t: 'restarting' });
+    session.markResume(); // reopen what was on screen once the app is back
     setTimeout(() => { stop(); opts.onRestart(); }, 400);
   }
   function delayedPower(fn, what) {
@@ -396,6 +444,11 @@ function createServer(opts) {
     switch (action) {
       case 'reload': await browser.reload(); return 'Page reloaded';
       case 'restart-app': restartApp('requested'); return 'Restarting PCTV Home';
+      case 'restart-tv': // launcher + browser together: the one "something is off" button
+        if (!opts.onRestart) { await browser.restartBrowser(); return 'Browser restarted'; }
+        session.markResume();
+        await browser.closeBrowser().catch(() => {});
+        restartApp('restart-tv'); return 'Restarting TV Home';
       case 'update-check': await opts.app?.update?.({ action: 'update-check' }); return 'Checking for updates…';
       case 'update-install': {
         const r = await opts.app?.update?.({ action: 'update-install' });
@@ -408,6 +461,7 @@ function createServer(opts) {
       case 'incognito-off': await browser.setIncognito(false); return 'Incognito off: your accounts are back';
       case 'incognito-toggle': return system(browser.isIncognito() ? 'incognito-off' : 'incognito-on');
       case 'exit-kiosk': await browser.closeBrowser(); return 'Kiosk closed';
+      case 'screen-off': displayIsOff = true; power.displayOff().catch(e => { displayIsOff = false; console.error('[power]', e.message); }); return 'Screen off';
       case 'sleep': setTimeout(() => power.sleep().catch(e => console.error('[power]', e.message)), 800); return 'Going to sleep';
       case 'reboot': return delayedPower(power.reboot, 'Restarting PC');
       case 'shutdown': return delayedPower(power.shutdown, 'Shutting down');
@@ -457,6 +511,7 @@ function createServer(opts) {
           windowPosition: opts.windowPosition,
         });
         setTimeout(() => input.park(), 4000);
+        if (session.takeResume()) setTimeout(autoResume, 2000);
         resolve({ port: PORT, remoteUrl: remoteUrl(), homeUrl: `http://localhost:${PORT}/` });
       });
     });
@@ -465,13 +520,14 @@ function createServer(opts) {
     try { watcher?.close(); } catch {}
     clearInterval(mediaTimer);
     clearInterval(nowTimer);
+    clearInterval(sessionTimer);
     input.stop(); stats.stop();
     for (const c of wss.clients) try { c.terminate(); } catch {}
     try { server.close(); } catch {}
   }
 
   return {
-    start, stop, events, system, broadcast, supporter,
+    start, stop, events, system, broadcast, supporter, markResume: () => session.markResume(),
     kioskForeground: () => browser.isForeground(),
     kioskOnHome: async () => { try { const u = new URL(await browser.currentUrl()); return u.origin + u.pathname === `http://localhost:${PORT}/`; } catch { return false; } },
     setBrowserPreference: p => browser.setPreference(p),

@@ -30,6 +30,10 @@
         <svg viewBox="0 0 24 24"><path d="M3 11h18"/><path d="M6 11l2-6h8l2 6"/><circle cx="7.5" cy="16" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/><path d="M10 16h4"/></svg>
         <span id="incogText">Incognito</span>
       </button>
+      <button class="chip chip-btn focusable" id="resumeBtn" hidden aria-label="Continue where you left off">
+        <svg viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></svg>
+        <span id="resumeText">Continue</span>
+      </button>
       <button class="chip chip-btn focusable" id="updateBtn" hidden>
         <svg viewBox="0 0 24 24"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>
         <span id="updateText">Update</span>
@@ -100,6 +104,15 @@
       </div>
     </aside>
   </footer>
+
+  <!-- Screensaver: pure black (OLED friendly), a dim clock that hops to a new spot every minute -->
+  <div class="saver" id="saver" hidden aria-hidden="true">
+    <div class="saver-inner" id="saverInner">
+      <div class="saver-time" id="saverTime"></div>
+      <div class="saver-date" id="saverDate"></div>
+      <div class="saver-np" id="saverNp"></div>
+    </div>
+  </div>
 
   <!-- Launch splash -->
   <div class="splash" id="splash" hidden>

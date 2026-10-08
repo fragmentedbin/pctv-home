@@ -70,6 +70,8 @@
     list.push(check('ok', 'Phone address', `${info.ip}:${info.port} — phone and PC must be on the same Wi-Fi`));
     $('#checks').replaceChildren(...list);
 
+    $('#saverAfter').value = String(st.screensaver ?? 5);
+    $('#saverOff').value = String(st.screenOff ?? 30);
     $('#autoUpdate').checked = st.autoUpdate !== false;
     $('#autoUpdate').closest('.toggle').style.display = st.update && st.update.status !== 'unsupported' ? '' : 'none';
     $('#startAtLogin').checked = !!st.startAtLogin;
@@ -117,6 +119,8 @@
   $('#secureDns').onchange = e => post('/api/app', { secureDns: e.target.value }).then(refresh);
   $('#ytFill').onchange = e => post('/api/app', { youtubeFill: e.target.value }).then(refresh);
   $('#browserPref').onchange = e => post('/api/app', { browser: e.target.value }).then(refresh);
+  $('#saverAfter').onchange = e => post('/api/app', { screensaver: +e.target.value }).then(refresh);
+  $('#saverOff').onchange = e => post('/api/app', { screenOff: +e.target.value }).then(refresh);
   $('#autoUpdate').onchange = e => post('/api/app', { autoUpdate: e.target.checked }).then(refresh);
   $('#openOnStart').onchange = e => post('/api/app', { openOnStart: e.target.checked }).then(refresh);
   document.querySelectorAll('[data-url]').forEach(a => a.onclick = e => { e.preventDefault(); openUrl(a.dataset.url); });

@@ -458,6 +458,19 @@ function playingScript() {
   })()`;
 }
 
+// What to remember for "continue where you left off": page, title and the video position.
+const SNAPSHOT_SCRIPT = `(() => {
+  let best = null, area = -1;
+  for (const v of document.querySelectorAll('video,audio')) {
+    if (v.readyState <= 0) continue;
+    const r = v.getBoundingClientRect(), a = r.width * r.height;
+    if (a > area) { area = a; best = v; }
+  }
+  return { url: location.href, title: document.title,
+    pos: best && isFinite(best.currentTime) ? Math.floor(best.currentTime) : 0,
+    dur: best && isFinite(best.duration) ? Math.floor(best.duration) : 0 };
+})()`;
+
 // Sites like to pause when their tab is hidden; a parked tab keeps telling them it is visible.
 const SPOOF_VISIBLE = `(() => {
   if (window.__pctvVis) return;
@@ -789,6 +802,21 @@ module.exports = {
       if (parked) return !!(await module.exports.nowPlaying());
       return (await evalMedia(mediaScript())) === true;
     } catch { return false; }
+  },
+
+  /** The app page being used (shown or parked) for "continue where you left off"; null on the home screen. */
+  async snapshot() {
+    try {
+      let v;
+      if (parked) v = await evalOn(parked.id, SNAPSHOT_SCRIPT);
+      else {
+        await connect();
+        const me = (await listPages()).find(p => p.id === conn.targetId);
+        if (!me || isHome(me.url) || !/^https?:/.test(me.url) || /^https?:\/\/(localhost|127\.0\.0\.1)[:/]/.test(me.url)) return null;
+        v = (await call('Runtime.evaluate', { returnByValue: true, expression: SNAPSHOT_SCRIPT })).result?.value;
+      }
+      return v && /^https?:/.test(v.url) ? { ...v, tv: parked ? parked.tv : appTv } : null;
+    } catch { return null; }
   },
 
   /** What the parked (background) app is playing, or null when nothing is parked. */

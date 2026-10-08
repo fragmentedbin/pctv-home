@@ -20,9 +20,6 @@
   <header class="bar">
     <div class="status"><img class="brand" src="/brand/logo.svg" alt="PCTV Home"><span id="dot" class="dot"></span><span id="statusText">Connecting…</span></div>
     <div class="bar-btns">
-      <button class="icon" id="restartBtn" aria-label="Restart launcher">
-        <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
-      </button>
       <button class="icon" id="sysBtn" aria-label="System">
         <svg viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1011.4 0"/></svg>
       </button>
@@ -103,9 +100,7 @@
       <h3>System <small id="appVersion" class="ver"></small></h3>
       <div class="sys-group">
         <button class="sys" data-sys="reload"><b>Reload page</b><small>Refresh what's on the TV</small></button>
-        <button class="sys" data-sys="restart-app"><b>Restart launcher</b><small>Apply code updates</small></button>
-        <button class="sys" data-sys="restart-browser"><b>Restart browser</b><small>Close and reopen the kiosk</small></button>
-        <button class="sys" data-sys="exit-kiosk" data-confirm="Close the kiosk browser?"><b>Exit kiosk</b><small>Show the Windows desktop</small></button>
+        <button class="sys" data-sys="restart-tv"><b>Restart TV Home</b><small>Fixes most problems. Reopens what you were watching</small></button>
       </div>
       <button class="sys upd-row" id="updRow" hidden><b id="updTitle"></b><small id="updSub"></small></button>
       <button class="sys sup-row" id="supRow" hidden><b id="supRowTitle"></b><small id="supRowSub"></small></button>

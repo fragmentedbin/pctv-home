@@ -45,6 +45,10 @@
     <h3>Settings</h3>
     <label class="toggle"><input type="checkbox" id="autoUpdate"><span class="sw"></span><span><b>Update automatically</b><small>Downloads new versions in the background; it asks before restarting</small></span></label>
     <label class="toggle"><input type="checkbox" id="startAtLogin"><span class="sw"></span><span><b>Start with my computer</b><small>Runs quietly in the tray / menu bar</small></span></label>
+    <label class="select"><span><b>Screensaver</b><small>After this long without a button press, TV Home shows a dim clock on black (kind to OLED screens)</small></span>
+      <select id="saverAfter"><option value="0">Off</option><option value="2">2 minutes</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option></select></label>
+    <label class="select"><span><b>Turn the screen off</b><small>Saves power: switches the display off this long after the screensaver starts. Any button on the phone turns it back on. The PC keeps running, so music keeps playing</small></span>
+      <select id="saverOff"><option value="0">Never</option><option value="15">After 15 minutes</option><option value="30">After 30 minutes</option><option value="60">After 1 hour</option><option value="120">After 2 hours</option></select></label>
     <label class="select"><span><b>Browser for streaming</b><small>Edge plays Netflix in up to 4K on Windows; Chrome is limited to 720p</small></span>
       <select id="browserPref"><option value="auto">Automatic</option><option value="chrome">Google Chrome</option><option value="edge">Microsoft Edge</option></select></label>
     <label class="select" id="displayRow" style="display:none"><span><b>Show TV Home on</b><small>Pick the TV or monitor; it's remembered</small></span>

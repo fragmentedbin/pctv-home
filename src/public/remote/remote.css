@@ -168,7 +168,6 @@ button.primary:active { background: #a8c7fa; }
 .wifi-ico .bar { stroke: rgba(255,255,255,.22); } .wifi-ico .bar.on { stroke: currentColor; }
 .bat-ico { width: 24px !important; height: 16px !important; } .bat-ico .lvl { fill: currentColor; stroke: none; }
 .bat-low { color: #f28b82; } .bat-chg { color: #81c995; }
-#restartBtn.spin svg { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .status .brand { width: 28px; height: 28px; border-radius: 8px; }

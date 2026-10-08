@@ -16,7 +16,31 @@ if (process.platform === 'win32') {
   } catch (e) { console.error('[power]', e.message); }
 }
 
+// Turn the display off (the PC keeps running) and back on. SC_MONITORPOWER: 2 = off, -1 = on.
+let PostMessageW = null;
+if (process.platform === 'win32') {
+  try {
+    const koffi = require('koffi');
+    PostMessageW = koffi.load('user32.dll').func('int __stdcall PostMessageW(intptr_t hWnd, uint32_t Msg, uintptr_t wParam, intptr_t lParam)');
+  } catch (e) { console.error('[power]', e.message); }
+}
+const HWND_BROADCAST = 0xFFFF, WM_SYSCOMMAND = 0x112, SC_MONITORPOWER = 0xF170;
+
 module.exports = {
+  async displayOff() {
+    if (process.platform === 'win32' && !process.env.PCTV_DRY_POWER) {
+      if (!PostMessageW || !PostMessageW(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, 2)) throw new Error('Could not turn the screen off');
+      return;
+    }
+    return run('pmset', ['displaysleepnow']);
+  },
+  async displayOn() {
+    if (process.platform === 'win32' && !process.env.PCTV_DRY_POWER) {
+      if (PostMessageW) PostMessageW(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, -1);
+      return;
+    }
+    return run('caffeinate', ['-u', '-t', '2']);
+  },
   async sleep() {
     if (process.platform === 'win32') {
       if (process.env.PCTV_DRY_POWER) return run('SetSuspendState', []);
