@@ -62,15 +62,21 @@
   </main>
 
   <section class="controls">
-    <div class="row3">
+    <div class="row2">
       <button class="round" data-cmd="back" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></svg><span>Back</span></button>
       <button class="round" data-cmd="home" aria-label="Home"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8a1 1 0 01-1 1h-4v-6h-6v6H5a1 1 0 01-1-1z"/></svg><span>Home</span></button>
-      <button class="round" data-key="playpause" data-norepeat aria-label="Play or pause"><svg viewBox="0 0 24 24"><path d="M5 5l8 7-8 7z"/><path d="M16 6v12M20 6v12"/></svg><span>Play</span></button>
     </div>
-    <div class="vol">
-      <button data-key="voldown" aria-label="Volume down"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
-      <button data-key="mute" data-norepeat class="mute" aria-label="Mute"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l4 6M21 9l-4 6"/></svg></button>
-      <button data-key="volup" aria-label="Volume up"><svg viewBox="0 0 24 24"><path d="M6 12h12M12 6v12"/></svg></button>
+    <div class="media" id="mediaBar" hidden role="group" aria-label="Playback">
+      <button data-key="prev" data-norepeat aria-label="Previous"><svg viewBox="0 0 24 24"><path d="M6 5v14"/><path d="M19 5l-9 7 9 7z" fill="currentColor"/></svg></button>
+      <button data-cmd="seek-back" aria-label="Back 10 seconds"><svg viewBox="0 0 24 24"><path d="M12 5V2L8 6l4 4V7a6 6 0 11-6 6"/><text x="12" y="16.2" font-size="7.2" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">10</text></svg></button>
+      <button class="play" data-key="playpause" data-norepeat aria-label="Play or pause"><svg viewBox="0 0 24 24"><path d="M5 5l8 7-8 7z" fill="currentColor" stroke="none"/><path d="M16 6v12M20 6v12"/></svg></button>
+      <button data-cmd="seek-fwd" aria-label="Forward 10 seconds"><svg viewBox="0 0 24 24"><path d="M12 5V2l4 4-4 4V7a6 6 0 10 6 6"/><text x="12" y="16.2" font-size="7.2" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">10</text></svg></button>
+      <button data-key="next" data-norepeat aria-label="Next"><svg viewBox="0 0 24 24"><path d="M18 5v14"/><path d="M5 5l9 7-9 7z" fill="currentColor"/></svg></button>
+    </div>
+    <div class="vol" role="group" aria-label="Volume">
+      <button data-key="voldown" aria-label="Volume down"><svg viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10z" fill="currentColor"/><path d="M16.5 9.5a3.5 3.5 0 010 5"/></svg><span>Vol −</span></button>
+      <button data-key="mute" data-norepeat class="mute" aria-label="Mute"><svg viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10z" fill="currentColor"/><path d="M17 9.5l4 5M21 9.5l-4 5"/></svg><span>Mute</span></button>
+      <button data-key="volup" aria-label="Volume up"><svg viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10z" fill="currentColor"/><path d="M16.5 9.5a3.5 3.5 0 010 5M19 7a7 7 0 010 10"/></svg><span>Vol +</span></button>
     </div>
   </section>
 
@@ -101,6 +107,7 @@
         <button class="sys" data-sys="restart-browser"><b>Restart browser</b><small>Close and reopen the kiosk</small></button>
         <button class="sys" data-sys="exit-kiosk" data-confirm="Close the kiosk browser?"><b>Exit kiosk</b><small>Show the Windows desktop</small></button>
       </div>
+      <button class="sys upd-row" id="updRow" hidden><b id="updTitle"></b><small id="updSub"></small></button>
       <button class="sys sup-row" id="supRow" hidden><b id="supRowTitle"></b><small id="supRowSub"></small></button>
       <button class="sys incog" id="incogSys" data-sys="incognito-toggle"><b id="incogSysTitle">Incognito mode</b><small id="incogSysSub">Private session on the TV. No logins or history are kept</small></button>
       <div class="sys-screens" id="sysScreens" hidden>

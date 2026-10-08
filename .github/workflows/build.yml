@@ -49,6 +49,8 @@ jobs:
           name: windows
           path: |
             dist/*.exe
+            dist/*.exe.blockmap
+            dist/latest.yml
             dist/*.appx
             dist/*.msix
           if-no-files-found: error

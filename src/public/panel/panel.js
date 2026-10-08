@@ -6,7 +6,7 @@
   function check(state, title, detail, action) {
     const li = document.createElement('li');
     li.className = state;
-    li.innerHTML = `<span class="i">${state === 'ok' ? '✓' : state === 'sup' ? '♥' : '!'}</span><span><b></b><small></small></span>`;
+    li.innerHTML = `<span class="i">${state === 'ok' ? '✓' : state === 'sup' ? '♥' : state === 'up' ? '↑' : '!'}</span><span><b></b><small></small></span>`;
     li.querySelector('b').textContent = title;
     li.querySelector('small').textContent = detail || '';
     if (action) {
@@ -57,9 +57,21 @@
     if (sup.enabled) list.push(sup.unlocked
       ? check('ok', 'Supporter', `Thank you for supporting PCTV Home · device ${sup.deviceId}`)
       : check('sup', 'Support PCTV Home', `Pay what you want, from the ♥ in the phone remote's ⏻ menu · device ${sup.deviceId}`));
+    const up = st.update;
+    if (up && up.status !== 'unsupported') {
+      const run = a => () => post('/api/app', { action: a }).then(refresh);
+      if (up.status === 'ready') list.push(check('up', `Update ready: v${up.version}`, 'Downloaded. Restart PCTV Home to install it.', { label: 'Restart to update', run: run('update-install') }));
+      else if (up.status === 'available') list.push(check('up', `New version: v${up.version}`, up.canInstall ? 'Ready to download.' : 'Download it from GitHub.', { label: up.canInstall ? 'Update now' : 'Open download page', run: run('update-install') }));
+      else if (up.status === 'downloading') list.push(check('up', `Downloading v${up.version}…`, `${up.percent}%`));
+      else if (up.status === 'checking') list.push(check('ok', 'Checking for updates…', `You have v${up.current}`));
+      else if (up.status === 'error') list.push(check('warn', 'Update problem', up.error || '', { label: 'Try again', run: run('update-check') }));
+      else list.push(check('ok', `PCTV Home v${up.current} is up to date`, up.lastChecked ? `Checked ${Math.max(1, Math.round((Date.now() - up.lastChecked) / 60000))} min ago` : 'Checks automatically', { label: 'Check now', run: run('update-check') }));
+    }
     list.push(check('ok', 'Phone address', `${info.ip}:${info.port} — phone and PC must be on the same Wi-Fi`));
     $('#checks').replaceChildren(...list);
 
+    $('#autoUpdate').checked = st.autoUpdate !== false;
+    $('#autoUpdate').closest('.toggle').style.display = st.update && st.update.status !== 'unsupported' ? '' : 'none';
     $('#startAtLogin').checked = !!st.startAtLogin;
     $('#openOnStart').checked = st.openOnStart !== false;
     if (st.browser) $('#browserPref').value = st.browser;
@@ -105,6 +117,7 @@
   $('#secureDns').onchange = e => post('/api/app', { secureDns: e.target.value }).then(refresh);
   $('#ytFill').onchange = e => post('/api/app', { youtubeFill: e.target.value }).then(refresh);
   $('#browserPref').onchange = e => post('/api/app', { browser: e.target.value }).then(refresh);
+  $('#autoUpdate').onchange = e => post('/api/app', { autoUpdate: e.target.checked }).then(refresh);
   $('#openOnStart').onchange = e => post('/api/app', { openOnStart: e.target.checked }).then(refresh);
   document.querySelectorAll('[data-url]').forEach(a => a.onclick = e => { e.preventDefault(); openUrl(a.dataset.url); });
 

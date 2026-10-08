@@ -170,6 +170,9 @@ const TV_UA = process.env.PCTV_TV_UA || UA_PRESETS[process.env.PCTV_TV_UA_PRESET
 let homeUrl = 'http://localhost:3000/';
 let kioskEnabled = false;
 let conn = null;          // { ws, targetId, pending, nextId }
+let parked = null;        // the app tab kept playing in the background: { id, tv }
+let wantedTarget = null;  // connect() prefers this tab (used when switching tabs)
+let appTv = false;        // does the app tab currently use the TV user agent?
 let defaultUA = null;
 
 const isHome = u => { try { const x = new URL(u); return x.origin + x.pathname === homeUrl; } catch { return false; } };
@@ -311,6 +314,8 @@ function spawnBrowser() {
     `--remote-debugging-port=${CDP_PORT}`,
     '--no-first-run', '--no-default-browser-check',
     '--autoplay-policy=no-user-gesture-required',
+    // background playback: a tab that is out of sight (parked app) must not be throttled or muted
+    '--disable-renderer-backgrounding', '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows',
     '--disable-session-crashed-bubble', '--hide-crash-restore-bubble',
     '--disable-background-mode',
     '--disable-features=Translate',
@@ -345,9 +350,9 @@ async function connect() {
   }
   const pages = await listPages();
   if (!pages.length) throw new Error('no page target');
-  const page = pages[0];
+  const page = pages.find(p => p.id === wantedTarget) || pages.find(p => !parked || p.id !== parked.id) || pages[0];
   const ws = new WebSocket(page.webSocketDebuggerUrl); // no Origin header -> allowed by Chrome
-  const c = { ws, targetId: page.id, pending: new Map(), nextId: 1 };
+  const c = { ws, targetId: page.id, pending: new Map(), nextId: 1, url: page.url };
   await new Promise((res, rej) => { ws.once('open', res); ws.once('error', rej); });
   ws.on('message', raw => {
     const msg = JSON.parse(raw);
@@ -365,11 +370,13 @@ async function connect() {
       } catch {}
     } else if (msg.method === 'Page.frameNavigated' && !msg.params.frame.parentId) {
       c.url = msg.params.frame.url;
+      events.emit('url', c.url);
       onFocusReport({ editable: false }); // new page in the main frame
     }
   });
   ws.on('close', () => { if (conn === c) { conn = null; onFocusReport({ editable: false }); } });
   conn = c;
+  events.emit('url', c.url);
   console.log(`[browser] DevTools connected to ${page.url.slice(0, 60)}`);
   try { // focus detection for text fields (email, password, OTP...)
     await call('Page.enable');
@@ -428,6 +435,108 @@ function call(method, params = {}) {
   });
 }
 
+// ---------- background playback ----------
+// When you go Home while something is playing (YouTube, Spotify...), the app's tab is "parked":
+// it keeps running in the same window, behind a fresh launcher tab, and the launcher shows a
+// "Now playing" card. Opening the same app again (or the card) brings the parked tab back.
+
+// Runs inside a page: what is playing? null = nothing media-like on this page.
+function playingScript() {
+  return `(() => {
+    const host = location.hostname, path = location.pathname || '';
+    if (/(^|\\.)netflix\\.com$/.test(host) && !path.startsWith('/watch')) return null;
+    if (/(^|\\.)disneyplus\\.com$/.test(host) && !/\\/(video|play)\\//.test(path)) return null;
+    const ms = navigator.mediaSession, md = ms && ms.metadata;
+    const screen = innerWidth * innerHeight;
+    const big = e => { const r = e.getBoundingClientRect(); return r.width * r.height > screen * 0.25; };
+    const els = [...document.querySelectorAll('video,audio')]
+      .filter(e => e.readyState > 0 && !(e.muted && e.loop) && (e.tagName === 'AUDIO' || !!md || big(e)));
+    const playing = els.some(e => !e.paused && !e.ended) || (!!ms && ms.playbackState === 'playing');
+    if (!playing && !els.length && !md) return null;
+    const art = md && md.artwork && md.artwork.length ? md.artwork[md.artwork.length - 1].src : '';
+    return { playing, host, title: (md && md.title) || document.title || host, artist: (md && (md.artist || md.album)) || '', art };
+  })()`;
+}
+
+// Sites like to pause when their tab is hidden; a parked tab keeps telling them it is visible.
+const SPOOF_VISIBLE = `(() => {
+  if (window.__pctvVis) return;
+  const stop = e => e.stopImmediatePropagation();
+  window.__pctvVis = stop;
+  try {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+  } catch {}
+  window.addEventListener('visibilitychange', stop, true);
+  document.addEventListener('visibilitychange', stop, true);
+})()`;
+const UNSPOOF_VISIBLE = `(() => {
+  const stop = window.__pctvVis;
+  if (!stop) return;
+  window.removeEventListener('visibilitychange', stop, true);
+  document.removeEventListener('visibilitychange', stop, true);
+  try { delete document.hidden; delete document.visibilityState; } catch {}
+  delete window.__pctvVis;
+})()`;
+
+const KNOWN_APPS = { 'youtube.com': 'YouTube', 'spotify.com': 'Spotify', 'netflix.com': 'Netflix', 'disneyplus.com': 'Disney+', 'twitch.tv': 'Twitch', 'primevideo.com': 'Prime Video' };
+function appLabel(host = '') {
+  const h = host.replace(/^(www|open|music|m|play)\./, '');
+  const key = Object.keys(KNOWN_APPS).find(k => h === k || h.endsWith('.' + k));
+  return key ? KNOWN_APPS[key] : h;
+}
+// "open.spotify.com" and "www.spotify.com" are the same app
+const siteOf = u => { try { return new URL(u).hostname.split('.').slice(-2).join('.'); } catch { return ''; } };
+
+/** Run a script in any tab over a short-lived DevTools connection (the main one stays on the shown tab). */
+async function evalOn(targetId, expression, timeout = 3000) {
+  const page = (await listPages()).find(p => p.id === targetId);
+  if (!page) throw new Error('tab is gone');
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(page.webSocketDebuggerUrl);
+    const done = (fn, v) => { clearTimeout(t); try { ws.close(); } catch {} fn(v); };
+    const t = setTimeout(() => done(reject, new Error('evalOn timeout')), timeout);
+    ws.once('error', e => done(reject, e));
+    ws.once('open', () => ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression, returnByValue: true } })));
+    ws.on('message', raw => {
+      const m = JSON.parse(raw);
+      if (m.id !== 1) return;
+      m.error ? done(reject, new Error(m.error.message)) : done(resolve, m.result?.result?.value);
+    });
+  });
+}
+
+/** Evaluate in the tab that holds the media: the parked app if there is one, else the shown tab. */
+async function evalMedia(expression) {
+  if (parked) return evalOn(parked.id, expression);
+  await connect();
+  const r = await call('Runtime.evaluate', { returnByValue: true, expression });
+  return r.result?.value;
+}
+
+async function closeTab(id) {
+  try { await fetch(`${CDP}/json/close/${id}`, { signal: AbortSignal.timeout(1500) }); } catch {}
+}
+
+/** Point the main DevTools connection at another tab. */
+async function switchTo(id) {
+  wantedTarget = id;
+  try {
+    if (conn) { const old = conn; conn = null; try { old.ws.close(); } catch {} }
+    await connect();
+  } finally { wantedTarget = null; }
+}
+
+async function newTab(url) {
+  try {
+    const r = await fetch(`${CDP}/json/new?${encodeURI(url)}`, { method: 'PUT', signal: AbortSignal.timeout(3000) });
+    const t = await r.json();
+    if (t?.id) return t.id;
+  } catch {}
+  const r = await call('Target.createTarget', { url });
+  return r.targetId;
+}
+
 // Everything injected into each page: focus/keyboard hook, pointer hide, YouTube TV fixes.
 function pageScript() {
   const browserVersion = ((defaultUA || '').match(/(?:Chrome|Edg)\/([\d.]+)/) || [])[1];
@@ -443,7 +552,7 @@ async function closeExtraPages() {
   if (!conn) return 0;
   let n = 0;
   for (const p of await listPages()) {
-    if (p.id === conn.targetId) continue;
+    if (p.id === conn.targetId || (parked && p.id === parked.id)) continue;
     try { await call('Target.closeTarget', { targetId: p.id }); n++; }
     catch { try { await fetch(`${CDP}/json/close/${p.id}`, { signal: AbortSignal.timeout(1000) }); n++; } catch {} }
   }
@@ -451,11 +560,52 @@ async function closeExtraPages() {
   return n;
 }
 
+// Runs inside the page: is something actually being watched? A big, loaded video counts, except
+//  - Netflix / Disney+ outside their player pages (the browse screens autoplay a muted trailer), and
+//  - muted looping clips (autoplaying banners and previews on any site).
+function mediaScript() {
+  return `(() => {
+    const host = location.hostname, path = location.pathname || '';
+    if (/(^|\\.)netflix\\.com$/.test(host) && !path.startsWith('/watch')) return false;
+    if (/(^|\\.)disneyplus\\.com$/.test(host) && !/\\/(video|play)\\//.test(path)) return false;
+    const screen = innerWidth * innerHeight;
+    for (const v of document.querySelectorAll('video')) {
+      const r = v.getBoundingClientRect();
+      if (v.readyState > 0 && r.width * r.height > screen * 0.25 && !(v.muted && v.loop)) return true;
+    }
+    // music players (Spotify...) have no picture: a playing audio element counts
+    for (const a of document.querySelectorAll('audio')) if (a.readyState > 0 && !a.paused && !a.ended) return true;
+    return false;
+  })()`;
+}
+
+// Runs inside the page. Netflix throws an error if a script sets currentTime, so it gets arrow keys.
+function seekScript(seconds) {
+  const d = Math.max(-120, Math.min(120, Math.round(Number(seconds) || 0)));
+  return `(() => {
+    let best = null, area = 0;
+    for (const v of document.querySelectorAll('video')) {
+      const r = v.getBoundingClientRect(), a = r.width * r.height;
+      if (a > area && v.readyState > 0) { area = a; best = v; }
+    }
+    if (!best) return 'none';
+    if (/(^|\\.)netflix\\.com$/.test(location.hostname)) return 'keys';
+    const s = best.seekable;
+    const lo = s.length ? s.start(0) : 0;
+    const hi = s.length ? s.end(s.length - 1) : (isFinite(best.duration) ? best.duration : best.currentTime);
+    best.currentTime = Math.max(lo, Math.min(hi, best.currentTime + (${d})));
+    return 'ok';
+  })()`;
+}
+
 module.exports = {
+  seekScript, mediaScript, playingScript, appLabel, siteOf, // exported for tests
   FOCUS_SCRIPT, // exported for tests
   events,
   focusState: () => focusState,
   connected: () => !!conn,
+  /** URL of the shown tab as last seen (no DevTools round trip). */
+  lastUrl: () => (conn && conn.url) || '',
   findBrowser,
   setPreference(p) { preference = ['chrome', 'edge'].includes(p) ? p : 'auto'; },
   /**
@@ -608,28 +758,89 @@ module.exports = {
     return true;
   },
 
-  /** Play/pause the biggest video on the page. Returns false if there is none. */
+  /** Play/pause the media on the page (or in the parked app). Returns false if there is none to control. */
   async togglePlayback() {
     try {
-      await connect();
-      const r = await call('Runtime.evaluate', { returnByValue: true, expression: `(() => {
-        let best = null, area = 0;
-        for (const v of document.querySelectorAll('video')) {
+      return (await evalMedia(`(() => {
+        let best = null, area = -1;
+        for (const v of document.querySelectorAll('video,audio')) {
+          if (v.readyState <= 0) continue;
           const r = v.getBoundingClientRect(), a = r.width * r.height;
-          if (a > area && v.readyState > 0) { area = a; best = v; }
+          if (a > area) { area = a; best = v; }
         }
         if (!best) return false;
         best.paused ? best.play() : best.pause();
         return true;
-      })()` });
-      return !!r.result?.value;
+      })()`)) === true;
     } catch { return false; }
+  },
+
+  /**
+   * Skip the biggest video on the page by `seconds` (negative = back).
+   * Returns 'ok', 'keys' (the site blocks scripted seeking: send arrow keys instead) or 'none'.
+   */
+  async seek(seconds) {
+    try { return (await evalMedia(seekScript(seconds))) || 'none'; } catch { return 'none'; }
+  },
+
+  /** Is something playing/showing that the phone's playback buttons can control? */
+  async hasMedia() {
+    try {
+      if (parked) return !!(await module.exports.nowPlaying());
+      return (await evalMedia(mediaScript())) === true;
+    } catch { return false; }
+  },
+
+  /** What the parked (background) app is playing, or null when nothing is parked. */
+  async nowPlaying() {
+    if (!parked) return null;
+    try {
+      const info = await evalOn(parked.id, playingScript());
+      const page = (await listPages()).find(p => p.id === parked.id);
+      const host = info?.host || (page ? new URL(page.url).hostname : '');
+      return {
+        app: appLabel(host), host,
+        title: info?.title || page?.title || appLabel(host),
+        artist: info?.artist || '', art: info?.art || '',
+        playing: !!info?.playing,
+      };
+    } catch {
+      parked = null; // the tab was closed or crashed
+      return null;
+    }
+  },
+  isParked: () => !!parked,
+
+  /** Bring the parked app back on screen. */
+  async resume() {
+    if (!parked) return false;
+    const p = parked;
+    try {
+      if (!(await listPages()).some(x => x.id === p.id)) { parked = null; return false; }
+      parked = null; // connect() may now close the launcher tab
+      await switchTo(p.id);
+      try { await call('Runtime.evaluate', { expression: UNSPOOF_VISIBLE }); } catch {}
+      if (p.tv) await setUA(TV_UA);
+      appTv = !!p.tv;
+      await call('Page.bringToFront');
+      await closeExtraPages().catch(() => {});
+      ensureFullscreen(conn.targetId);
+      return true;
+    } catch (e) { console.warn('[browser] could not resume the app:', e.message); parked = null; return false; }
+  },
+
+  /** Stop the background app (closes its tab). */
+  async stopParked() {
+    if (!parked) return false;
+    const id = parked.id; parked = null;
+    await closeTab(id);
+    return true;
   },
 
   /** Close the kiosk browser window. */
   async closeBrowser() {
     try { await connect(); await call('Browser.close'); } catch {}
-    conn = null;
+    conn = null; parked = null;
   },
 
   /** Close and reopen the kiosk browser. */
@@ -642,8 +853,16 @@ module.exports = {
   /** Open a tile URL in the kiosk tab. tvMode = use TV user agent. */
   async open(url, tvMode) {
     await connect();
+    if (parked) { // an app is playing in the background
+      const pp = (await listPages()).find(p => p.id === parked.id);
+      if (pp && siteOf(pp.url) && siteOf(pp.url) === siteOf(url)) { // same app: just come back to it
+        if (await module.exports.resume()) return;
+      }
+      await module.exports.stopParked(); // a different app replaces it
+    }
     await closeExtraPages().catch(() => {}); // pop-ups/tabs from the previous app
     await setUA(tvMode ? TV_UA : null);
+    appTv = !!tvMode;
     await call('Page.navigate', { url });
     await call('Page.bringToFront');
   },
@@ -651,14 +870,34 @@ module.exports = {
   async home() {
     try {
       await connect();
+      const me = (await listPages()).find(p => p.id === conn.targetId);
+      if (me && !isHome(me.url) && !parked) {
+        // leaving an app: if it is playing, keep it running in its own tab behind the launcher
+        let playing = false;
+        try { playing = (await call('Runtime.evaluate', { returnByValue: true, expression: playingScript() })).result?.value?.playing === true; } catch {}
+        if (playing) {
+          const appId = conn.targetId;
+          const launcher = (await listPages()).find(p => p.id !== appId && isHome(p.url));
+          parked = { id: appId, tv: appTv };
+          try { await call('Runtime.evaluate', { expression: SPOOF_VISIBLE }); } catch {}
+          const lid = launcher ? launcher.id : await newTab(homeUrl);
+          await switchTo(lid);
+          await setUA(null);
+          await call('Page.bringToFront');
+          ensureFullscreen(conn.targetId);
+          return true;
+        }
+      }
       await closeExtraPages();
       await setUA(null);
+      appTv = false;
       await call('Page.navigate', { url: homeUrl });
       await call('Page.bringToFront');
       ensureFullscreen(conn.targetId);
       return true;
     } catch (e) {
       // Browser closed or crashed: relaunch it in kiosk mode.
+      parked = null;
       if (kioskEnabled) { await launch(); return true; }
       return false;
     }

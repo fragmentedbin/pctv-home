@@ -18,6 +18,16 @@ git push -u origin main
 3. GitHub Actions builds the Windows installers (x64 + arm64) and the macOS DMGs (Apple Silicon + Intel), then creates a **draft release** with all files attached.
 4. Open *Releases* on GitHub, check the draft, and click **Publish**.
 
+### How installed copies update themselves
+
+The Windows installer (not the Store build) checks GitHub Releases 45 seconds after it starts and every 6 hours, using `latest.yml` and the `.blockmap` files that the **windows** job uploads next to the `.exe` files (the app downloads only the changed parts). When a newer version is **published** it downloads quietly in the background, then offers **Restart to update** on the TV, on the phone remote (⏻ menu) and in the tray menu. It never restarts by itself; if nobody taps, it installs the next time the app is quit.
+
+- A **draft** release is invisible to the updater: remember to click **Publish**.
+- Releases marked *pre-release* are ignored.
+- The installer installs for all users (that is what adds the firewall rule), so Windows shows an administrator prompt (UAC) when the update is applied. That prompt can't be clicked from the phone remote, so a PC used as a TV needs a mouse or keyboard nearby for it.
+- macOS copies can't replace themselves while the app is only ad-hoc signed. They just show "New version available" and open the download page.
+- Microsoft Store copies update through the Store.
+
 ## 3. Microsoft Store (free, and works with Smart App Control)
 
 Store apps are signed by Microsoft, so Windows trusts them even with Smart App Control on. Registering as an individual developer is free.

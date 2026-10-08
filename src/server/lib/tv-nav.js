@@ -6,9 +6,12 @@
 // Focus also sends a real hover (through the DevTools binding __tvHover), so
 // sites react exactly as if the mouse were over the item: :hover styles,
 // Netflix's expanding preview cards, row arrows, etc.
+const { DPAD_HOSTS } = require('./dpad-sites');
+
 module.exports = String.raw`(() => {
   if (window.__tvNav || window.top !== window) return;
   window.__tvNav = true;
+  const DPAD_HOSTS = __PCTV_DPAD_HOSTS__;
 
   const SELECTOR = [
     'a[href]', 'button', 'input:not([type=hidden])', 'select', 'textarea', 'summary',
@@ -25,6 +28,8 @@ module.exports = String.raw`(() => {
   let ring = null;
   let ringOn = false;
   let busy = false;
+  let lastY = 0;          // scroll position when lastRect was taken
+  const NETFLIX = /(^|\.)netflix\.com$/.test(location.hostname);
 
   const now = () => Date.now();
   const synthetic = () => now() < (window.__tvSynth || 0); // our own hover moves
@@ -38,7 +43,8 @@ module.exports = String.raw`(() => {
     const de = document.documentElement;
     if (!de || de.hasAttribute('data-tv-launcher')) return true;
     if (/Leanback|SMART-TV|Tizen|Web0S|Cobalt/i.test(navigator.userAgent)) return true;
-    if (/netflix\.com$/.test(location.hostname) && location.pathname.startsWith('/watch')) return true;
+    // only sites that were checked get D-pad navigation (see dpad-sites.js); the phone uses the touchpad elsewhere
+    if (/^https?:$/.test(location.protocol) && !DPAD_HOSTS.some(d => location.hostname === d || location.hostname.endsWith('.' + d))) return true;
     const area = innerWidth * innerHeight;
     for (const v of document.querySelectorAll('video')) {
       const r = v.getBoundingClientRect();
@@ -98,31 +104,42 @@ module.exports = String.raw`(() => {
   }
 
   function best(dir, f, list) {
-    let pick = null, score = Infinity;
+    const horiz = dir === 'right' || dir === 'left';
+    const opts = [];
     for (const c of list) {
       const r = c.r;
       if (c.el === current || c.pager) continue; // row arrows are only used for paging
       let gap, overlap, cross;
-      if (dir === 'right' || dir === 'left') {
+      if (horiz) {
         gap = dir === 'right' ? r.left - f.right : f.left - r.right;
         if (gap < -Math.min(f.width, r.width) * 0.3) continue;
         overlap = Math.min(f.bottom, r.bottom) - Math.max(f.top, r.top);
         if (overlap <= 0) continue;                       // left/right never jumps rows
         cross = Math.abs((r.top + r.height / 2) - (f.top + f.height / 2));
+        opts.push({ c, s: Math.max(gap, 0) + cross * 0.25 });
       } else {
         gap = dir === 'down' ? r.top - f.bottom : f.top - r.bottom;
         if (gap < -Math.min(f.height, r.height) * 0.3) continue;
         overlap = Math.min(f.right, r.right) - Math.max(f.left, r.left);
         cross = Math.abs((r.left + r.width / 2) - (f.left + f.width / 2));
+        opts.push({ c, gap: Math.max(gap, 0), cross, overlap });
       }
-      const s = Math.max(gap, 0) + (overlap > 0 ? cross * 0.25 : cross * 2 + 400);
-      if (s < score) { score = s; pick = c; }
     }
-    return pick;
+    if (!opts.length) return null;
+    if (horiz) return opts.reduce((m, o) => (o.s < m.s ? o : m)).c;
+    // up/down: go to the NEXT ROW first (the closest ones above/below), then pick the
+    // item in that row nearest to where we were. Without this a far-away item that happens
+    // to line up horizontally would be chosen over the hero buttons right below the menu.
+    const minGap = Math.min(...opts.map(o => o.gap));
+    const row = opts.filter(o => o.gap <= minGap + Math.max(24, Math.min(f.height, o.c.r.height) * 0.5));
+    return row.reduce((m, o) => (o.cross < m.cross ? o : m)).c;
   }
 
   // ---------- real hover via DevTools ----------
   function hover(el) {
+    // Netflix swaps a hovered card for a big preview pop-up that covers its neighbours and
+    // re-renders the row, which made the focus jump or vanish. Cards are focused without hover.
+    if (NETFLIX && el.matches && el.matches('[data-uia$="-card"], [data-uia*="title-card"]')) return;
     if (typeof window.__tvHover !== 'function' || !el.isConnected) return;
     const v = visibleRect(el, el.getBoundingClientRect());
     if (v.width <= 0) return;
@@ -174,19 +191,21 @@ module.exports = String.raw`(() => {
     ringOn = true;
     try { el.focus({ preventScroll: true }); } catch (e) {}
     const r = el.getBoundingClientRect();
-    lastRect = r;
+    lastRect = r; lastY = scrollY;
     const margin = innerHeight * 0.2;
     if (r.top < margin || r.bottom > innerHeight - margin) {
       window.scrollBy({ top: r.top + r.height / 2 - innerHeight * 0.45, behavior: 'smooth' });
-      setTimeout(() => { if (current === el) { lastRect = el.getBoundingClientRect(); hover(el); } }, 380);
+      setTimeout(() => { if (current === el) { lastRect = el.getBoundingClientRect(); lastY = scrollY; hover(el); } }, 380);
     } else hover(el);
   }
 
   function startPoint(list) {
     const ae = document.activeElement;
     if (ae && ae !== document.body && list.some(c => c.el === ae)) return ae;
-    const onScreen = list.filter(c => c.r.top >= 0 && c.r.bottom <= innerHeight && !findPagerLike(c.el))
+    let onScreen = list.filter(c => c.r.top >= 0 && c.r.bottom <= innerHeight && !findPagerLike(c.el))
       .sort((a, b) => (a.r.top - b.r.top) || (a.r.left - b.r.left));
+    // Netflix: start on the hero's Play button / first card, not on the menu bar
+    if (NETFLIX && !scrollY) { const body = onScreen.filter(c => c.r.top > 90); if (body.length) onScreen = body; }
     return (onScreen[0] || list[0] || {}).el || null;
   }
 
@@ -239,9 +258,14 @@ module.exports = String.raw`(() => {
   function move(dir) {
     const horizontal = dir === 'left' || dir === 'right';
     const alive = current && current.isConnected;
-    if (alive) lastRect = current.getBoundingClientRect();
+    if (alive) { lastRect = current.getBoundingClientRect(); lastY = scrollY; }
+    else if (lastRect && lastY !== scrollY) { // the site re-rendered the item: keep our place on the page
+      const d = lastY - scrollY, o = lastRect;
+      lastRect = { left: o.left, right: o.right, width: o.width, height: o.height, top: o.top + d, bottom: o.bottom + d };
+      lastY = scrollY;
+    }
     const list = candidates(horizontal && lastRect ? lastRect : null);
-    if (!ringOn || !lastRect || (!alive && !horizontal)) {
+    if (!ringOn || !lastRect) {
       const s = startPoint(list);
       if (s) setCurrent(s);
       return;
@@ -285,4 +309,4 @@ module.exports = String.raw`(() => {
     e.preventDefault(); e.stopImmediatePropagation();
     if (!busy) move(dir);
   }, true);
-})();`;
+})();`.replace('__PCTV_DPAD_HOSTS__', JSON.stringify(DPAD_HOSTS));

@@ -185,8 +185,9 @@
 
   // ---------- focus / spatial navigation ----------
   const activeLayer = () => (!addDlg.hidden ? addDlg : !delDlg.hidden ? delDlg : !screenDlg.hidden ? screenDlg : !optDlg.hidden ? optDlg : $('#main'));
+  const visible = el => el.getClientRects().length > 0; // hidden chips must not steal the focus
   const layerItems = () => activeLayer() === $('#main')
-    ? [...document.querySelectorAll('.top .focusable'), ...$('#main').querySelectorAll('.focusable')]
+    ? [...document.querySelectorAll('.top .focusable'), ...document.querySelectorAll('#np:not([hidden]) .focusable'), ...$('#main').querySelectorAll('.focusable')].filter(visible)
     : [...activeLayer().querySelectorAll('.focusable')];
 
   function setFocus(el) {
@@ -278,7 +279,7 @@
       s.tabIndex = -1;
       s.style.background = c;
       s.dataset.color = c;
-      s.title = c === DEFAULT_COLOR ? 'Auto (from icon)' : c;
+      s.setAttribute('aria-label', c === DEFAULT_COLOR ? 'Auto (from icon)' : c); // aria-label: no hover tooltip
       s.addEventListener('click', () => { addColor = c; box.querySelectorAll('.swatch').forEach(x => x.classList.toggle('sel', x.dataset.color === c)); });
       return s;
     }));
@@ -419,7 +420,6 @@
   // ---------- incognito ----------
   function setIncognito(on) {
     document.body.classList.toggle('incognito', !!on);
-    $('#incogBadge').hidden = !on;
     $('#incogBtn').dataset.state = on ? 'on' : 'off';
     $('#incogText').textContent = on ? 'Exit incognito' : 'Incognito';
   }
@@ -449,8 +449,7 @@
     if (n.type === 'none') nc.innerHTML = `${wifiIcon(0)}<b>Offline</b>`;
     else {
       const name = n.type === 'wifi' ? (n.ssid || 'Wi-Fi') : 'Ethernet';
-      const sig = n.type === 'wifi' && n.signal != null ? `<span class="dim">${n.signal}%</span>` : '';
-      nc.innerHTML = `${n.type === 'wifi' ? wifiIcon(n.signal) : '<svg viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="10" rx="2"/><path d="M8 9V5h8v4M9 13v2M12 13v2M15 13v2"/></svg>'}<b>${name.replace(/[<>&]/g, '')}</b>${sig}<span class="ping ${pingClass(ping)}">${ping == null ? '—' : ping + ' ms'}</span>`;
+      nc.innerHTML = `${n.type === 'wifi' ? wifiIcon(n.signal) : '<svg viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="10" rx="2"/><path d="M8 9V5h8v4M9 13v2M12 13v2M15 13v2"/></svg>'}<b>${name.replace(/[<>&]/g, '')}</b><span class="ping ${pingClass(ping)}">${ping == null ? '—' : ping + ' ms'}</span>`;
     }
     const bc = $('#batChip');
     bc.hidden = !b.present;
@@ -460,6 +459,50 @@
       bc.innerHTML = `${batIcon(b.percent, b.charging || b.plugged)}<b>${b.percent ?? '?'}%</b>`;
     }
   }
+
+
+  // ---------- background playback ("Now playing") ----------
+  const npPost = a => fetch('/api/nowplaying/' + a, { method: 'POST' }).then(r => r.json()).catch(() => ({ ok: false }));
+  function renderNowPlaying(np) {
+    const box = $('#np'), was = !box.hidden;
+    box.hidden = !np;
+    if (!np) {
+      if (was && focused && box.contains(focused)) setFocus(layerItems().find(e => e.classList.contains('tile')) || layerItems()[0]);
+      return;
+    }
+    $('#npState').textContent = np.playing ? 'Now playing' : 'Paused';
+    $('#npApp').textContent = np.app || '';
+    $('#npTitle').textContent = np.title || '';
+    $('#npArtist').textContent = np.artist || '';
+    $('#npToggleText').textContent = np.playing ? 'Pause' : 'Play';
+    box.classList.toggle('paused', !np.playing);
+    const art = $('#npArt');
+    art.style.backgroundImage = np.art ? `url("${String(np.art).replace(/"/g, '%22')}")` : '';
+    art.classList.toggle('has-art', !!np.art);
+  }
+  $('#npToggle').addEventListener('click', () => npPost('toggle'));
+  $('#npOpen').addEventListener('click', async () => { const r = await npPost('resume'); if (!r.ok) toast('That app is no longer open'); });
+  $('#npStop').addEventListener('click', async () => { await npPost('stop'); toast('Stopped'); });
+
+  // ---------- app updates ----------
+  const sysPost = a => fetch('/api/sys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ a }) }).then(r => r.json());
+  function renderUpdate(u) {
+    const b = $('#updateBtn'), st = u && u.status;
+    const show = ['ready', 'available', 'downloading', 'error'].includes(st) && (st !== 'error' || u.version);
+    b.hidden = !show;
+    if (!show) return;
+    b.dataset.state = st;
+    b.disabled = st === 'downloading';
+    $('#updateText').textContent = st === 'ready' ? `Restart to update · v${u.version}`
+      : st === 'available' ? (u.canInstall ? `Update to v${u.version}` : `v${u.version} available`)
+      : st === 'downloading' ? `Updating… ${u.percent}%` : 'Update failed · retry';
+  }
+  $('#updateBtn').addEventListener('click', async () => {
+    const st = $('#updateBtn').dataset.state;
+    if (st === 'downloading') return;
+    toast(st === 'ready' ? 'Restarting to install the update…' : st === 'error' ? 'Checking again…' : 'Starting the update…');
+    try { const r = await sysPost(st === 'error' ? 'update-check' : 'update-install'); if (!r.ok) toast(r.msg); } catch {}
+  });
 
   $('#addSave').addEventListener('click', saveAdd);
   $('#addCancel').addEventListener('click', closeDialogs);
@@ -506,10 +549,25 @@
   });
 
   // ---------- live updates ----------
+  // The QR code lets anyone on the Wi-Fi pair a phone, so it hides once a remote is connected.
+  // The "Remote connected" chip brings it back (click / OK on it) when someone else wants to join.
+  let remoteN = 0, qrPinned = false;
+  function updateQr() {
+    const chip = $('#remoteChip');
+    $('#qrCard').hidden = remoteN > 0 && !qrPinned;
+    chip.classList.toggle('focusable', remoteN > 0);
+    chip.tabIndex = remoteN > 0 ? 0 : -1;
+    chip.setAttribute('aria-label', remoteN > 0 ? (qrPinned ? 'Hide the pairing QR code' : 'Show the pairing QR code') : 'Remote');
+    if (remoteN === 0 && focused === chip) setFocus(layerItems()[0]);
+  }
   function setRemotes(n) {
+    if (n === 0 || remoteN === 0) qrPinned = false; // a fresh connection hides the QR again
+    remoteN = n;
     $('#remoteChip').dataset.state = n > 0 ? 'on' : 'off';
     $('#remoteChipText').textContent = n > 0 ? (n === 1 ? 'Remote connected' : `${n} remotes connected`) : 'No remote';
+    updateQr();
   }
+  $('#remoteChip').addEventListener('click', () => { if (remoteN > 0) { qrPinned = !qrPinned; updateQr(); } });
   let bootId = null;
   function connectWs() {
     const ws = new WebSocket(`ws://${location.host}/ws`);
@@ -519,6 +577,8 @@
       if (m.t === 'remotes') setRemotes(m.n);
       if (m.t === 'restarting') toast('Restarting launcher…');
       if (m.t === 'stats') renderStats(m);
+      if (m.t === 'update') renderUpdate(m);
+      if (m.t === 'nowplaying') renderNowPlaying(m.np);
       if (m.t === 'reload-ui') location.reload();
       if (m.t === 'incognito') setIncognito(m.on);
       if (m.t === 'hold') { // long-press OK on the phone

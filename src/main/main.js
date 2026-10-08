@@ -5,6 +5,9 @@ const path = require('path');
 const fs = require('fs');
 const { createServer } = require('../server');
 const { createWatermark } = require('./watermark');
+const { createUpdater } = require('./updater');
+let electronUpdater = null; // missing until `npm install` has fetched it: then updating is simply off
+try { electronUpdater = require('electron-updater').autoUpdater; } catch (e) { console.warn('[update] electron-updater not installed:', e.message); }
 
 const DEV = process.argv.includes('--dev');
 const ICONS = path.join(__dirname, 'icons'); // runtime copies of build/ icons (see scripts/make-icons.py)
@@ -16,7 +19,7 @@ app.setAppUserModelId('com.fragmentedbin.pctvhome');
 
 // ---------- settings ----------
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
-let settings = { openOnStart: true, firstRun: true, browser: 'auto', youtubeFill: 'auto', uiScale: 'auto', display: 'primary', secureDns: 'off' };
+let settings = { openOnStart: true, firstRun: true, browser: 'auto', youtubeFill: 'auto', uiScale: 'auto', display: 'primary', secureDns: 'off', autoUpdate: true };
 
 // ---------- TV size (kiosk UI scale) ----------
 // 'auto' sizes websites for viewing from the couch on whatever screen the kiosk is
@@ -106,7 +109,7 @@ function setStartAtLogin(on) {
 }
 
 // ---------- windows ----------
-let panel = null, tray = null, server = null, watermark = null;
+let panel = null, tray = null, server = null, watermark = null, updater = null, trayMenu = null;
 const startedInBackground = process.argv.includes('--background') ||
   (process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAsHidden);
 
@@ -133,10 +136,25 @@ function trayImage() {
   return nativeImage.createFromPath(path.join(ICONS, 'tray.png'));
 }
 
+// ---------- updates ----------
+function installUpdate() {
+  const u = updater.state();
+  if (u.status === 'ready' && u.canInstall) app.isQuitting = true; // let the window close so the installer can run
+  return updater.install();
+}
+function updateMenuItems() {
+  const u = updater?.state();
+  if (!u || u.status === 'unsupported') return [];
+  if (u.status === 'ready') return [{ label: `Restart to update to v${u.version}`, click: installUpdate }];
+  if (u.status === 'available') return [{ label: u.canInstall ? `Update to v${u.version}` : `Get v${u.version}…`, click: installUpdate }];
+  if (u.status === 'downloading') return [{ label: `Downloading update… ${u.percent}%`, enabled: false }];
+  return [{ label: u.status === 'checking' ? 'Checking for updates…' : 'Check for updates', enabled: u.status !== 'checking', click: () => updater.check(true) }];
+}
+
 function buildTray() {
   tray = new Tray(trayImage());
   tray.setToolTip('PCTV Home');
-  const menu = () => Menu.buildFromTemplate([
+  const menu = trayMenu = () => Menu.buildFromTemplate([
     { label: 'Open TV Home', click: () => server.openKiosk().catch(e => dialog.showErrorBox('PCTV Home', e.message)) },
     { label: 'Pair phone / settings…', click: showPanel },
     { type: 'separator' },
@@ -144,6 +162,7 @@ function buildTray() {
       label: 'Start with my computer', type: 'checkbox', checked: getStartAtLogin(),
       click: item => setStartAtLogin(item.checked),
     }]),
+    ...updateMenuItems(),
     { label: 'Restart PCTV Home', click: restart },
     { type: 'separator' },
     { label: 'Quit PCTV Home', click: () => { app.isQuitting = true; app.quit(); } },
@@ -230,9 +249,12 @@ app.whenReady().then(async () => {
         uiScaleEffective: effectiveScale(),
         display: (() => { const d = kioskDisplay(); return { width: d.size.width * d.scaleFactor, height: d.size.height * d.scaleFactor, osScale: d.scaleFactor }; })(),
         store: isStore,
+        autoUpdate: settings.autoUpdate !== false,
+        update: updater?.state() || null,
         packaged: app.isPackaged,
         accessibility: process.platform === 'darwin' ? systemPreferences.isTrustedAccessibilityClient(false) : null,
       }),
+      getUpdate: () => updater?.state() || null,
       listDisplays,
       setDisplay: async id => {
         const d = screen.getAllDisplays().find(x => String(x.id) === id);
@@ -257,6 +279,9 @@ app.whenReady().then(async () => {
         if (['off', 'cloudflare', 'google', 'quad9', 'adguard'].includes(body.secureDns)) {
           settings.secureDns = body.secureDns; saveSettings(); await server.setSecureDns(body.secureDns);
         }
+        if (typeof body.autoUpdate === 'boolean') { settings.autoUpdate = body.autoUpdate; saveSettings(); }
+        if (body.action === 'update-check' && updater) updater.check(true);
+        if (body.action === 'update-install' && updater) return installUpdate();
         if (body.action === 'accessibility') {
           systemPreferences.isTrustedAccessibilityClient(true);
           shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility');
@@ -278,6 +303,13 @@ app.whenReady().then(async () => {
     return;
   }
 
+  updater = createUpdater({
+    autoUpdater: electronUpdater, app, isStore,
+    isEnabled: () => settings.autoUpdate !== false,
+    openExternal: url => shell.openExternal(url),
+  });
+  updater.events.on('state', st => { server.broadcast({ t: 'update', ...st }); if (trayMenu) tray?.setContextMenu(trayMenu()); });
+  updater.start();
   buildTray();
   watchDisplays();
   startWatermark();

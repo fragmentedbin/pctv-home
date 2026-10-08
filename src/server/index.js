@@ -14,6 +14,7 @@ const QRCode = require('qrcode');
 
 const input = require('./lib/input');
 const browser = require('./lib/browser');
+const { noDpad } = require('./lib/dpad-sites');
 const createIcons = require('./lib/icons');
 const stats = require('./lib/stats');
 const power = require('./lib/power');
@@ -242,6 +243,11 @@ function createServer(opts) {
     } catch { input.browserBack(); }
   }
   async function doHome() { if (!(await browser.home())) input.browserHome(); }
+  // skip ±N seconds in the playing video; Netflix blocks scripted seeking, so it gets its own arrow keys
+  async function doSeek(seconds) {
+    const r = await browser.seek(seconds);
+    if (r === 'keys') input.key(seconds < 0 ? 'left' : 'right');
+  }
   async function doPlayPause() { if (!(await browser.togglePlayback())) input.key('playpause'); }
 
   wss.on('connection', (ws, req) => {
@@ -254,6 +260,10 @@ function createServer(opts) {
     broadcastRemotes();
     ws.on('close', broadcastRemotes);
     ws.send(JSON.stringify({ t: 'focus', ...browser.focusState() }));
+    ws.send(JSON.stringify({ t: 'media', on: mediaOn }));
+    ws.send(JSON.stringify({ t: 'nowplaying', np: JSON.parse(npJson) }));
+    ws.send(JSON.stringify({ t: 'padmode', touch: touchOnly }));
+    { const u = opts.app?.getUpdate?.(); if (u) ws.send(JSON.stringify({ t: 'update', ...u })); }
     if (stats.get()) ws.send(JSON.stringify({ t: 'stats', ...stats.get() }));
     if (supporter?.enabled) {
       // phones may get the support prompt (never the TV); at most every few days
@@ -279,6 +289,8 @@ function createServer(opts) {
           () => ws.send(JSON.stringify({ t: 'voice-ack', ok: false })));
           break;
         case 'home': doHome(); break;
+        case 'seek-back': doSeek(-10); break;
+        case 'seek-fwd': doSeek(10); break;
         case 'move': pointerUsed(); input.move(m.dx, m.dy); break;
         case 'click': pointerUsed(); input.click(m.b); break;
         case 'wheel': pointerUsed(); input.wheel(m.d); break;
@@ -308,6 +320,50 @@ function createServer(opts) {
           break;
       }
     });
+  });
+
+  // Playback buttons on the phone only make sense while a video is showing. Check every 2 s,
+  // and only while a phone is connected and the kiosk browser is up.
+  let mediaOn = false, mediaBusy = false;
+  const mediaTimer = setInterval(async () => {
+    if (mediaBusy || !remoteCount() || !browser.connected()) { if (mediaOn && !browser.connected()) { mediaOn = false; broadcast({ t: 'media', on: false }); } return; }
+    mediaBusy = true;
+    const on = await browser.hasMedia();
+    mediaBusy = false;
+    if (on !== mediaOn) { mediaOn = on; broadcast({ t: 'media', on }); }
+  }, 2000);
+
+  // Apps without D-pad support (Netflix...): tell the phones to switch to the touchpad.
+  let touchOnly = false;
+  function updateTouchOnly(url) {
+    const v = noDpad(url);
+    if (v !== touchOnly) { touchOnly = v; broadcast({ t: 'padmode', touch: v }); }
+  }
+  browser.events.on('url', updateTouchOnly);
+
+  // An app playing in the background (parked tab): the launcher shows a "Now playing" card.
+  let npJson = 'null', npBusy = false;
+  async function pollNowPlaying() {
+    if (npBusy) return;
+    npBusy = true;
+    try {
+      const np = browser.isParked() ? await browser.nowPlaying() : null;
+      const j = JSON.stringify(np);
+      if (j !== npJson) { npJson = j; broadcast({ t: 'nowplaying', np }); }
+    } finally { npBusy = false; }
+  }
+  const nowTimer = setInterval(pollNowPlaying, 2000);
+
+  app.post('/api/nowplaying/:a', auth, async (req, res) => {
+    const a = req.params.a;
+    try {
+      if (a === 'resume') { if (!(await browser.resume())) return res.json({ ok: false }); }
+      else if (a === 'stop') await browser.stopParked();
+      else if (a === 'toggle') await doPlayPause();
+      else return res.status(404).json({ error: 'unknown action' });
+      await pollNowPlaying();
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ ok: false, msg: e.message }); }
   });
 
   stats.events.on('update', st => broadcast({ t: 'stats', ...st }));
@@ -340,6 +396,12 @@ function createServer(opts) {
     switch (action) {
       case 'reload': await browser.reload(); return 'Page reloaded';
       case 'restart-app': restartApp('requested'); return 'Restarting PCTV Home';
+      case 'update-check': await opts.app?.update?.({ action: 'update-check' }); return 'Checking for updates…';
+      case 'update-install': {
+        const r = await opts.app?.update?.({ action: 'update-install' });
+        if (!r?.ok) throw new Error('No update is ready to install');
+        return r.opened ? 'Opening the download page on the PC' : 'Restarting to install the update';
+      }
       case 'restart-browser': await browser.restartBrowser(); return 'Browser restarted';
       case 'open-kiosk': await browser.launchOrFocus(); return 'TV Home opened';
       case 'incognito-on': await browser.setIncognito(true); return 'Incognito on: nothing is saved';
@@ -401,6 +463,8 @@ function createServer(opts) {
   }
   function stop() {
     try { watcher?.close(); } catch {}
+    clearInterval(mediaTimer);
+    clearInterval(nowTimer);
     input.stop(); stats.stop();
     for (const c of wss.clients) try { c.terminate(); } catch {}
     try { server.close(); } catch {}

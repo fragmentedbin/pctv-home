@@ -13,7 +13,7 @@
   <a href="https://github.com/fragmentedbin/pctv-home/releases"><img alt="Download" src="https://img.shields.io/github/v/release/fragmentedbin/pctv-home?label=download&color=6d5dfc"></a>
   <a href="https://github.com/fragmentedbin/pctv-home/actions/workflows/build.yml"><img alt="Build" src="https://github.com/fragmentedbin/pctv-home/actions/workflows/build.yml/badge.svg"></a>
   <img alt="Platforms" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-555">
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-free%20for%20personal%20use-2563eb"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-free%20for%20personal%20use-0d9488"></a>
 </p>
 
 <p align="center"><img src="docs/images/home.jpg" alt="PCTV Home screen" width="860"></p>

@@ -67,7 +67,7 @@ async def main():
 
         # Microsoft Store tiles (logo centred on brand colour)
         def tile(w, h, scale):
-            bg = Image.new("RGBA", (w, h), (91, 91, 246, 255))
+            bg = Image.new("RGBA", (w, h), (15, 150, 138, 255))
             s = int(min(w, h) * scale)
             bg.alpha_composite(big.resize((s, s), Image.LANCZOS), ((w - s) // 2, (h - s) // 2))
             return bg
@@ -81,7 +81,7 @@ async def main():
 
         # installer art
         side = await render(page, f"""
-          <div style="width:164px;height:314px;background:linear-gradient(160deg,#8B5CF6,#2563EB);
+          <div style="width:164px;height:314px;background:linear-gradient(160deg,#34E0C8,#0B5E6E);
                display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
                font-family:Segoe UI,Arial,sans-serif;color:#fff">
             {svg(LOGO, 96, 96)}
@@ -90,8 +90,8 @@ async def main():
           </div>""", 164, 314)
         side.convert("RGB").save(BUILD / "installerSidebar.bmp")
         dmg = await render(page, f"""
-          <div style="width:540px;height:380px;background:linear-gradient(160deg,#F5F3FF,#E0E7FF);
-               font-family:-apple-system,Helvetica,sans-serif;color:#312E81;position:relative">
+          <div style="width:540px;height:380px;background:linear-gradient(160deg,#F0FDFA,#CCFBF1);
+               font-family:-apple-system,Helvetica,sans-serif;color:#134E4A;position:relative">
             <div style="position:absolute;top:28px;width:100%;text-align:center;font-size:20px;font-weight:700">PCTV Home</div>
             <div style="position:absolute;top:58px;width:100%;text-align:center;font-size:13px;opacity:.7">Drag to Applications to install</div>
             <div style="position:absolute;top:190px;left:238px;font-size:48px;opacity:.35">→</div>

@@ -69,7 +69,7 @@ appx:
   publisher: CN=REPLACE_WITH_PUBLISHER_ID
   publisherDisplayName: Muhammad Maududy
   displayName: PCTV Home
-  backgroundColor: "#5B5BF6"
+  backgroundColor: "#0F968A"
   showNameOnTiles: true
   addAutoLaunchExtension: true
   capabilities:

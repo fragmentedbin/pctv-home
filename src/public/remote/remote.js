@@ -27,6 +27,9 @@
       if (m.t === 'hello' && !m.input) setStatus(true, 'Connected (dev)');
       if (m.t === 'hello' && m.version) $('#appVersion').textContent = 'v' + m.version;
       if (m.t === 'focus') onTvFocus(m);
+      if (m.t === 'media') $('#mediaBar').hidden = !m.on;
+      if (m.t === 'update') onUpdate(m);
+      if (m.t === 'padmode') onPadMode(m.touch);
       if (m.t === 'supporter') onSupporter(m);
       if (m.t === 'supporter:redeem') onRedeem(m);
       if (m.t === 'hello') setIncognito(m.incognito);
@@ -52,6 +55,9 @@
   const send = obj => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); };
   // iOS drops sockets in the background; reconnect when we come back
   document.addEventListener('visibilitychange', () => { if (!document.hidden) connect(); });
+  // iOS freezes the page when Safari is closed or the phone locks; reconnect the moment it wakes
+  addEventListener('pageshow', () => connect());
+  addEventListener('online', () => connect());
   setInterval(() => send({ t: 'ping' }), 20000);
   connect();
 
@@ -85,15 +91,28 @@
   document.querySelectorAll('[data-key],[data-cmd]').forEach(bindButton);
 
   // ---------- D-pad / touchpad toggle ----------
-  function setMode(m) {
+  let forcedPad = false, modeBefore = null;
+  function setMode(m, persist = true) {
     $('#dpadView').hidden = m !== 'dpad';
     $('#padView').hidden = m !== 'pad';
     $('#segDpad').classList.toggle('on', m === 'dpad');
     $('#segPad').classList.toggle('on', m === 'pad');
-    try { localStorage.setItem('tvmode', m); } catch {}
+    if (persist) try { localStorage.setItem('tvmode', m); } catch {}
   }
-  $('#segDpad').addEventListener('click', () => setMode('dpad'));
-  $('#segPad').addEventListener('click', () => setMode('pad'));
+  $('#segDpad').addEventListener('click', () => {
+    if (forcedPad) return; // this app only works with the touchpad
+    setMode('dpad');
+  });
+  $('#segPad').addEventListener('click', () => setMode('pad', !forcedPad));
+  // Apps without D-pad support (Netflix...): switch to the touchpad by itself and lock the D-pad
+  // for as long as the app is open; going back Home restores whatever the user had picked.
+  function onPadMode(touch) {
+    if (touch === forcedPad) return;
+    forcedPad = touch;
+    $('#segDpad').classList.toggle('locked', touch);
+    if (touch) { modeBefore = $('#segPad').classList.contains('on') ? 'pad' : 'dpad'; setMode('pad', false); }
+    else { setMode(modeBefore || 'dpad', false); modeBefore = null; }
+  }
   let savedMode = 'dpad';
   try { savedMode = localStorage.getItem('tvmode') || 'dpad'; } catch {}
   setMode(savedMode);
@@ -461,6 +480,38 @@
       el.innerHTML = `${batIcon(b.percent, b.charging || b.plugged)}<b>${b.percent ?? '?'}%</b>${left}`;
     } else $('#psBat').innerHTML = '';
   }
+
+
+  // ---------- app updates (system menu row + dot on the ⏻ button) ----------
+  let upd = null, updArmT = null;
+  function onUpdate(u) {
+    upd = u;
+    const row = $('#updRow'), st = u.status;
+    row.hidden = st === 'unsupported';
+    row.classList.remove('ready', 'available', 'error', 'armed');
+    row.disabled = st === 'checking' || st === 'downloading';
+    const ago = u.lastChecked ? ` · checked ${Math.max(1, Math.round((Date.now() - u.lastChecked) / 60000))} min ago` : '';
+    let title = 'Check for updates', sub = `You have v${u.current}${ago}`;
+    if (st === 'checking') { title = 'Checking for updates…'; sub = `You have v${u.current}`; }
+    else if (st === 'downloading') { title = `Downloading v${u.version}…`; sub = `${u.percent}%. The TV keeps working meanwhile`; }
+    else if (st === 'ready') { title = `Restart to update to v${u.version}`; sub = 'Installs in a moment; TV Home restarts'; row.classList.add('ready'); }
+    else if (st === 'available') { title = u.canInstall ? `Update to v${u.version}` : `New version v${u.version}`; sub = u.canInstall ? 'Tap to download it' : 'Opens the download page on the PC'; row.classList.add('available'); }
+    else if (st === 'error') { title = 'Update failed. Tap to retry'; sub = u.error || ''; row.classList.add('error'); }
+    $('#updTitle').textContent = title; $('#updSub').textContent = sub;
+    $('#sysBtn').classList.toggle('has-update', st === 'ready' || st === 'available');
+  }
+  $('#updRow').addEventListener('click', () => {
+    if (!upd) return;
+    const row = $('#updRow');
+    if (upd.status === 'ready' && !row.classList.contains('armed')) { // a restart interrupts what's playing: ask once
+      row.classList.add('armed'); $('#updSub').textContent = 'Tap again to restart the TV app now';
+      clearTimeout(updArmT); updArmT = setTimeout(() => onUpdate(upd), 4000);
+      return;
+    }
+    clearTimeout(updArmT);
+    $('#sysMsg').textContent = 'Working…';
+    send({ t: 'sys', a: ['ready', 'available'].includes(upd.status) ? 'update-install' : 'update-check' });
+  });
 
   // ---------- system menu ----------
   let armed = null, armT = null;
